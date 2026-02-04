@@ -1,0 +1,10 @@
+streamlit>=1.18.0
+toml
+gspread
+google-auth
+pandas
+google-api-python-client
+oauth2client
+google-auth-httplib2
+google-auth-oauthlib
+watchdog
