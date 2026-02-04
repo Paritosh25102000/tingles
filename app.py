@@ -143,6 +143,23 @@ def update_row_by_number(row_number, updates: dict):
         st.error(f"gspread update failed: {e}")
         return False
 
+
+def resolve_image_url(url: str) -> str:
+    """Try to convert common hosting page URLs to direct image URLs.
+    Currently handles ibb.co -> i.ibb.co/<id>.jpg heuristic.
+    """
+    if not url:
+        return None
+    s = str(url).strip()
+    try:
+        if "ibb.co" in s and "i.ibb.co" not in s:
+            # example: https://ibb.co/6RnJn4zP -> https://i.ibb.co/6RnJn4zP.jpg
+            img_id = s.rstrip("/\n\r").split("/")[-1]
+            return f"https://i.ibb.co/{img_id}.jpg"
+    except Exception:
+        pass
+    return s
+
 # Small connection checker UI
 with st.expander("Connection / Sheet check", expanded=True):
     if conn is None:
@@ -219,7 +236,10 @@ else:
                 with cols[i % 3]:
                     st.markdown(f"<div class='profile-card'>", unsafe_allow_html=True)
                     if row.get("ImageURL"):
-                        st.image(row.get("ImageURL"), use_column_width=True)
+                        img_url = resolve_image_url(row.get("ImageURL"))
+                        # use explicit width instead of deprecated use_column_width
+                        if img_url:
+                            st.image(img_url, width=320)
                     st.markdown(f"<h3 class='name'>{row.get('Name','')}</h3>", unsafe_allow_html=True)
                     st.markdown(f"<p class='stats'>Height: {row.get('Height','N/A')} &nbsp;|&nbsp; Industry: {row.get('Industry','N/A')} &nbsp;|&nbsp; Education: {row.get('Education','N/A')}</p>", unsafe_allow_html=True)
                     # LinkedIn button (opens in new tab)
