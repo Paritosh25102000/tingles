@@ -171,11 +171,40 @@ if st.session_state.df is None:
     st.warning("Sheet data not loaded. Use the connection checker above and ensure your secrets are configured.")
 else:
     df = st.session_state.df
-    # Normalize expected columns
+    # Normalize column names (accept common aliases from the sheet)
+    alias_map = {
+        "name": "Name",
+        "full_name": "Name",
+        "photo_url": "ImageURL",
+        "imageurl": "ImageURL",
+        "image_url": "ImageURL",
+        "height": "Height",
+        "industry": "Industry",
+        "profession": "Industry",
+        "job": "Industry",
+        "education": "Education",
+        "linkedin_url": "LinkedIn",
+        "linkedin": "LinkedIn",
+        "status": "Status",
+        "match_stage": "MatchStage",
+        "matchstage": "MatchStage",
+        "phone": "Phone",
+        "id": "ID",
+    }
+    # Build rename mapping based on existing df columns
+    rename_map = {}
+    for col in list(df.columns):
+        lower = str(col).strip().lower()
+        if lower in alias_map:
+            rename_map[col] = alias_map[lower]
+    if rename_map:
+        df = df.rename(columns=rename_map)
+    # Ensure expected columns exist
     expected_columns = ["Name", "ImageURL", "Height", "Industry", "Education", "LinkedIn", "Status", "MatchStage", "Phone"]
     for col in expected_columns:
         if col not in df.columns:
             df[col] = ""
+    st.session_state.df = df
 
     if view == "Gallery":
         st.header("Gallery")
