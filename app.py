@@ -208,7 +208,9 @@ else:
 
     if view == "Gallery":
         st.header("Gallery")
-        available = df[df["Status"].str.lower() == "available"]
+        # Treat common 'available' synonyms from sheets as available
+        avail_set = {"available", "single", "open"}
+        available = df[df["Status"].fillna("").astype(str).str.lower().isin(avail_set)]
         if available.empty:
             st.info("No available profiles at the moment.")
         else:
