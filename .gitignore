@@ -1,0 +1,9 @@
+/.venv
+.env
+.DS_Store
+__pycache__/
+.pytest_cache/
+.streamlit/secrets.toml
+*.pyc
+/.mypy_cache
+/.coverage
