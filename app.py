@@ -49,43 +49,61 @@ def init_gspread_from_toml():
     except Exception:
         return False, "gspread package not installed"
 
-    # Try st.secrets first (works on Streamlit Cloud)
-    data = None
+    # Try to get secrets - multiple formats supported
+    spreadsheet = None
+    creds = None
+
+    # Method 1: Try st.secrets directly (Streamlit Cloud format)
     try:
-        data = dict(st.secrets)
-    except Exception:
+        # Check for connections.gsheets format (used by st.connection)
+        if "connections" in st.secrets and "gsheets" in st.secrets["connections"]:
+            gsheets_secrets = st.secrets["connections"]["gsheets"]
+            spreadsheet = gsheets_secrets.get("spreadsheet")
+            # Service account creds are usually at root level alongside connections
+            creds = {k: v for k, v in st.secrets.items() if k not in ("connections", "spreadsheet")}
+            # Or they might be nested
+            if not creds or "type" not in creds:
+                if "service_account" in gsheets_secrets:
+                    creds = dict(gsheets_secrets["service_account"])
+        # Check for flat format (spreadsheet + service account at root)
+        elif "spreadsheet" in st.secrets:
+            spreadsheet = st.secrets["spreadsheet"]
+            creds = {k: v for k, v in st.secrets.items() if k != "spreadsheet"}
+        # Check for type key (service account JSON directly at root)
+        elif "type" in st.secrets:
+            creds = dict(st.secrets)
+            # spreadsheet might be in a different key
+            spreadsheet = st.secrets.get("spreadsheet") or st.secrets.get("sheet_url")
+    except Exception as e:
         pass
 
-    # Fallback to local file
-    if not data:
+    # Method 2: Fallback to local secrets.toml file
+    if not spreadsheet or not creds:
         try:
             import toml
             p = Path(".streamlit/secrets.toml")
             if p.exists():
                 data = toml.loads(p.read_text())
+                if "connections" in data and "gsheets" in data["connections"]:
+                    gsheets_data = data["connections"]["gsheets"]
+                    spreadsheet = spreadsheet or gsheets_data.get("spreadsheet")
+                    creds = creds or {k: v for k, v in data.items() if k not in ("connections", "spreadsheet")}
+                else:
+                    spreadsheet = spreadsheet or data.get("spreadsheet")
+                    creds = creds or {k: v for k, v in data.items() if k != "spreadsheet"}
         except Exception:
             pass
 
-    if not data:
-        return False, "no-secrets: st.secrets empty and no local secrets.toml"
-
-    # Extract service account credentials (exclude non-credential keys)
-    creds = {k: v for k, v in data.items() if k not in ("auth", "spreadsheet", "connections")}
-    # Also check nested gsheets connection format
-    if "connections" in data and "gsheets" in data["connections"]:
-        gsheets_conn = data["connections"]["gsheets"]
-        if "spreadsheet" in gsheets_conn:
-            spreadsheet = gsheets_conn["spreadsheet"]
-        else:
-            spreadsheet = data.get("spreadsheet")
-        # Service account info might be nested
-        if "service_account" in gsheets_conn:
-            creds = dict(gsheets_conn["service_account"])
-    else:
-        spreadsheet = data.get("spreadsheet")
-
     if not spreadsheet:
-        return False, f"no-spreadsheet key in secrets. Keys found: {list(data.keys())}"
+        # Debug: show what keys are available
+        try:
+            available_keys = list(st.secrets.keys()) if hasattr(st.secrets, 'keys') else "st.secrets has no keys()"
+        except Exception:
+            available_keys = "could not read st.secrets"
+        return False, f"no spreadsheet URL found. Available secret keys: {available_keys}"
+
+    if not creds or "type" not in creds:
+        return False, f"no service account credentials found. Creds keys: {list(creds.keys()) if creds else 'None'}"
 
     try:
         gspread_client = gspread.service_account_from_dict(creds)
