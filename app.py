@@ -47,7 +47,7 @@ def init_gspread_from_toml():
     try:
         import gspread
     except Exception:
-        return False, "missing-packages"
+        return False, "gspread package not installed"
 
     # Try st.secrets first (works on Streamlit Cloud)
     data = None
@@ -67,7 +67,7 @@ def init_gspread_from_toml():
             pass
 
     if not data:
-        return False, "no-secrets"
+        return False, "no-secrets: st.secrets empty and no local secrets.toml"
 
     # Extract service account credentials (exclude non-credential keys)
     creds = {k: v for k, v in data.items() if k not in ("auth", "spreadsheet", "connections")}
@@ -85,52 +85,52 @@ def init_gspread_from_toml():
         spreadsheet = data.get("spreadsheet")
 
     if not spreadsheet:
-        return False, "no-spreadsheet"
+        return False, f"no-spreadsheet key in secrets. Keys found: {list(data.keys())}"
 
     try:
         gspread_client = gspread.service_account_from_dict(creds)
         gspread_sh = gspread_client.open_by_url(spreadsheet)
         gspread_ws = gspread_sh.sheet1
-        # Try to get credentials sheet
-        try:
-            credentials_ws = gspread_sh.worksheet("credentials")
-        except Exception:
-            try:
-                credentials_ws = gspread_sh.worksheet("Credentials")
-            except Exception:
-                try:
-                    credentials_ws = gspread_sh.add_worksheet(title="credentials", rows=100, cols=3)
-                    credentials_ws.append_row(["username", "password", "role"])
-                except Exception:
-                    credentials_ws = None
-        return True, "ok"
     except Exception as e:
-        return False, str(e)
+        return False, f"gspread init failed: {e}"
+
+    # Try to get credentials sheet - list all sheets for debugging
+    try:
+        all_sheets = [ws.title for ws in gspread_sh.worksheets()]
+    except Exception:
+        all_sheets = []
+
+    try:
+        credentials_ws = gspread_sh.worksheet("credentials")
+    except Exception:
+        try:
+            credentials_ws = gspread_sh.worksheet("Credentials")
+        except Exception:
+            # Try to create it
+            try:
+                credentials_ws = gspread_sh.add_worksheet(title="credentials", rows=100, cols=3)
+                credentials_ws.append_row(["username", "password", "role"])
+            except Exception as e:
+                return False, f"credentials sheet not found and could not create. Available sheets: {all_sheets}. Error: {e}"
+
+    return True, "ok"
 
 def load_credentials():
-    """Load username/password/role from credentials sheet."""
-    if conn is not None:
-        try:
-            # Try to read from 'credentials' sheet via st.connection
-            # st.connection for gsheets doesn't easily support multiple sheets, so fallback
-            pass
-        except Exception:
-            pass
-    
-    # Use gspread fallback
+    """Load username/password/role from credentials sheet. Returns (df, error_msg) tuple."""
+    # Use gspread (works on both local and Streamlit Cloud)
     ok, why = init_gspread_from_toml()
     if not ok:
-        return None
-    
+        return None, f"gspread init failed: {why}"
+
     if credentials_ws is None:
-        return None
-    
+        return None, "credentials_ws is None after init"
+
     try:
         records = credentials_ws.get_all_records()
         df = pd.DataFrame(records)
-        return df
-    except Exception:
-        return None
+        return df, None
+    except Exception as e:
+        return None, f"Failed to read credentials sheet: {e}"
 
 # Sheet helpers supporting both conn and gspread fallback
 def load_sheet():
@@ -371,9 +371,9 @@ if "logged_in" not in st.session_state:
 
 def authenticate_user(username, password):
     """Verify username/password against credentials sheet. Returns (success, role, error_msg) tuple."""
-    creds_df = load_credentials()
+    creds_df, load_error = load_credentials()
     if creds_df is None:
-        return False, None, "Could not load credentials sheet. Make sure a sheet named 'credentials' exists."
+        return False, None, f"Could not load credentials: {load_error}"
     if creds_df.empty:
         return False, None, "Credentials sheet is empty. Add users to the 'credentials' sheet."
 
@@ -413,7 +413,7 @@ def logout():
 
 def username_exists(username):
     """Check if username is already taken."""
-    creds_df = load_credentials()
+    creds_df, _ = load_credentials()
     if creds_df is None or creds_df.empty:
         return False
     creds_df.columns = creds_df.columns.str.lower().str.strip()
