@@ -37,33 +37,72 @@ except Exception:
     conn = None
 
 def init_gspread_from_toml():
-    """Fallback initializer that reads .streamlit/secrets.toml and creates a gspread client."""
+    """Initialize gspread client from secrets (st.secrets on Cloud, or .streamlit/secrets.toml locally)."""
     global gspread_client, gspread_sh, gspread_ws, credentials_ws
+
+    # Return early if already initialized
+    if gspread_ws is not None:
+        return True, "ok"
+
     try:
-        import toml
         import gspread
     except Exception:
         return False, "missing-packages"
-    p = Path(".streamlit/secrets.toml")
-    if not p.exists():
+
+    # Try st.secrets first (works on Streamlit Cloud)
+    data = None
+    try:
+        data = dict(st.secrets)
+    except Exception:
+        pass
+
+    # Fallback to local file
+    if not data:
+        try:
+            import toml
+            p = Path(".streamlit/secrets.toml")
+            if p.exists():
+                data = toml.loads(p.read_text())
+        except Exception:
+            pass
+
+    if not data:
         return False, "no-secrets"
-    data = toml.loads(p.read_text())
-    creds = {k: v for k, v in data.items() if k not in ("auth", "spreadsheet")}
-    spreadsheet = data.get("spreadsheet")
+
+    # Extract service account credentials (exclude non-credential keys)
+    creds = {k: v for k, v in data.items() if k not in ("auth", "spreadsheet", "connections")}
+    # Also check nested gsheets connection format
+    if "connections" in data and "gsheets" in data["connections"]:
+        gsheets_conn = data["connections"]["gsheets"]
+        if "spreadsheet" in gsheets_conn:
+            spreadsheet = gsheets_conn["spreadsheet"]
+        else:
+            spreadsheet = data.get("spreadsheet")
+        # Service account info might be nested
+        if "service_account" in gsheets_conn:
+            creds = dict(gsheets_conn["service_account"])
+    else:
+        spreadsheet = data.get("spreadsheet")
+
     if not spreadsheet:
         return False, "no-spreadsheet"
+
     try:
         gspread_client = gspread.service_account_from_dict(creds)
         gspread_sh = gspread_client.open_by_url(spreadsheet)
         gspread_ws = gspread_sh.sheet1
-        # Try to get credentials sheet (assumes it exists with name "credentials" or "Credentials")
+        # Try to get credentials sheet
         try:
             credentials_ws = gspread_sh.worksheet("credentials")
         except Exception:
             try:
                 credentials_ws = gspread_sh.worksheet("Credentials")
             except Exception:
-                credentials_ws = None
+                try:
+                    credentials_ws = gspread_sh.add_worksheet(title="credentials", rows=100, cols=3)
+                    credentials_ws.append_row(["username", "password", "role"])
+                except Exception:
+                    credentials_ws = None
         return True, "ok"
     except Exception as e:
         return False, str(e)
@@ -123,7 +162,7 @@ def write_sheet(df):
     """Overwrite entire sheet (only used when st.connection is available)."""
     if conn is not None:
         try:
-            conn.write(df)
+            conn.update(worksheet="Sheet1", data=df)
             return True
         except Exception as e:
             st.error(f"Failed to write via st.connection: {e}")
@@ -191,10 +230,7 @@ def append_row(row_dict):
         return False
 
 def update_row_by_number(row_number, updates: dict):
-    """Update specific columns by worksheet row number (1-based including header)."""
-    if conn is not None:
-        st.error("Row-level update via st.connection not implemented; falling back to full write.")
-        return False
+    """Update specific columns by worksheet row number (1-based including header). Always uses gspread."""
     ok, why = init_gspread_from_toml()
     if not ok:
         st.error(f"gspread not initialized: {why}")
@@ -334,19 +370,21 @@ if "logged_in" not in st.session_state:
     st.session_state.role = None
 
 def authenticate_user(username, password):
-    """Verify username/password against credentials sheet. Returns (success, role) tuple."""
+    """Verify username/password against credentials sheet. Returns (success, role, error_msg) tuple."""
     creds_df = load_credentials()
-    if creds_df is None or creds_df.empty:
-        return False, None
-    
+    if creds_df is None:
+        return False, None, "Could not load credentials sheet. Make sure a sheet named 'credentials' exists."
+    if creds_df.empty:
+        return False, None, "Credentials sheet is empty. Add users to the 'credentials' sheet."
+
     # Normalize column names (handle common variants)
     creds_df.columns = creds_df.columns.str.lower().str.strip()
-    
+
     # Find username/password/role columns
     username_col = None
     password_col = None
     role_col = None
-    
+
     for col in creds_df.columns:
         if "username" in col or "user" in col:
             username_col = col
@@ -354,18 +392,18 @@ def authenticate_user(username, password):
             password_col = col
         if "role" in col:
             role_col = col
-    
+
     if not username_col or not password_col or not role_col:
-        return False, None
-    
+        return False, None, f"Credentials sheet missing required columns. Found: {list(creds_df.columns)}"
+
     # Find matching user
     for idx, row in creds_df.iterrows():
         if str(row.get(username_col, "")).strip() == str(username).strip():
             if str(row.get(password_col, "")).strip() == str(password).strip():
                 role = str(row.get(role_col, "")).strip().lower()
-                return True, role
-    
-    return False, None
+                return True, role, None
+
+    return False, None, "Invalid username or password."
 
 def logout():
     """Clear login session."""
@@ -373,7 +411,71 @@ def logout():
     st.session_state.username = None
     st.session_state.role = None
 
-# ============ LOGIN PAGE ============
+def username_exists(username):
+    """Check if username is already taken."""
+    creds_df = load_credentials()
+    if creds_df is None or creds_df.empty:
+        return False
+    creds_df.columns = creds_df.columns.str.lower().str.strip()
+    for col in creds_df.columns:
+        if "username" in col or "user" in col:
+            for idx, row in creds_df.iterrows():
+                if str(row.get(col, "")).strip().lower() == str(username).strip().lower():
+                    return True
+    return False
+
+def create_new_user(username, password, role="user"):
+    """Add new user to credentials sheet. Returns (success, message)."""
+    if username_exists(username):
+        return False, "Username already taken."
+    
+    ok, why = init_gspread_from_toml()
+    if not ok:
+        return False, f"Could not connect to sheet: {why}"
+    
+    if credentials_ws is None:
+        return False, "Could not create or access credentials sheet. Ensure service account has edit permissions."
+    
+    try:
+        # Get header to determine column order
+        header = credentials_ws.row_values(1)
+        if not header or header == []:
+            # Sheet exists but is empty; add headers
+            credentials_ws.append_row(["username", "password", "role"])
+            header = ["username", "password", "role"]
+        
+        username_col = None
+        password_col = None
+        role_col = None
+        
+        for i, col in enumerate(header):
+            col_lower = str(col).strip().lower()
+            if "username" in col_lower or "user" in col_lower:
+                username_col = i
+            if "password" in col_lower or "pass" in col_lower:
+                password_col = i
+            if "role" in col_lower:
+                role_col = i
+        
+        if username_col is None or password_col is None or role_col is None:
+            return False, "Credentials sheet missing required columns (username, password, role). Please set up the sheet manually."
+        
+        # Build row values matching header order
+        row_values = [""] * len(header)
+        row_values[username_col] = username
+        row_values[password_col] = password
+        row_values[role_col] = role
+        
+        credentials_ws.append_row(row_values)
+        return True, "Account created successfully! Please log in."
+    except Exception as e:
+        return False, f"Failed to create account: {str(e)}"
+
+# ============ LOGIN / SIGN-UP PAGE ============
+# Initialize signup mode state
+if "signup_mode" not in st.session_state:
+    st.session_state.signup_mode = False
+
 if not st.session_state.logged_in:
     st.markdown("<div style='text-align: center; padding: 60px 20px;'>", unsafe_allow_html=True)
     st.markdown("<h2 style='font-family: Playfair Display, serif; font-size: 48px; margin-bottom: 30px;'>Welcome to Tingles</h2>", unsafe_allow_html=True)
@@ -381,23 +483,53 @@ if not st.session_state.logged_in:
     
     login_col1, login_col2, login_col3 = st.columns([1, 2, 1])
     with login_col2:
-        st.markdown("### Login")
-        username = st.text_input("Username", placeholder="Enter your username")
-        password = st.text_input("Password", type="password", placeholder="Enter your password")
+        # Toggle between Login and Sign Up
+        tab1, tab2 = st.tabs(["Sign In", "Sign Up"])
         
-        if st.button("Sign In", use_container_width=True):
-            if username and password:
-                success, role = authenticate_user(username, password)
-                if success:
-                    st.session_state.logged_in = True
-                    st.session_state.username = username
-                    st.session_state.role = role
-                    st.success(f"Welcome, {username}!")
-                    st.rerun()
+        with tab1:
+            st.markdown("### Login to Your Account")
+            username = st.text_input("Username", placeholder="Enter your username", key="login_username")
+            password = st.text_input("Password", type="password", placeholder="Enter your password", key="login_password")
+            
+            if st.button("Sign In", use_container_width=True, key="signin_btn"):
+                if username and password:
+                    success, role, error_msg = authenticate_user(username, password)
+                    if success:
+                        st.session_state.logged_in = True
+                        st.session_state.username = username
+                        st.session_state.role = role
+                        st.success(f"Welcome, {username}!")
+                        st.rerun()
+                    else:
+                        st.error(error_msg)
                 else:
-                    st.error("Invalid username or password.")
-            else:
-                st.warning("Please enter both username and password.")
+                    st.warning("Please enter both username and password.")
+        
+        with tab2:
+            st.markdown("### Create a New Account")
+            signup_username = st.text_input("Choose a username", placeholder="Enter your desired username", key="signup_username")
+            signup_password = st.text_input("Choose a password", type="password", placeholder="Enter a password", key="signup_password")
+            signup_confirm = st.text_input("Confirm password", type="password", placeholder="Re-enter your password", key="signup_confirm")
+            
+            if st.button("Create Account", use_container_width=True, key="signup_btn"):
+                if not signup_username or not signup_password or not signup_confirm:
+                    st.warning("Please fill in all fields.")
+                elif signup_password != signup_confirm:
+                    st.error("Passwords do not match.")
+                elif len(signup_password) < 6:
+                    st.error("Password must be at least 6 characters long.")
+                elif len(signup_username) < 3:
+                    st.error("Username must be at least 3 characters long.")
+                else:
+                    success, message = create_new_user(signup_username, signup_password, role="user")
+                    if success:
+                        st.success(message)
+                        st.info("Redirecting to login page in 2 seconds...")
+                        import time
+                        time.sleep(2)
+                        st.rerun()
+                    else:
+                        st.error(message)
     
     st.markdown("</div>", unsafe_allow_html=True)
     st.stop()  # Stop execution here; don't show main app until logged in
@@ -536,51 +668,27 @@ else:
                     # Express Interest button
                     key = f"express_{i}"
                     if st.button("Express Interest", key=key):
-                        # Find the row index in the original df and update locally first
-                        orig_index = row.name
-                        # Update local copy so UI reflects interest immediately
-                        try:
-                            df.at[orig_index, "Status"] = "Interested"
-                            df.at[orig_index, "MatchStage"] = "Requested"
-                            st.session_state.df = df
-                        except Exception:
-                            st.warning("Could not update local state; proceeding to attempt sheet update.")
-
-                        # Then persist the change to the sheet (preferred via st.connection)
+                        # Persist to Google Sheet using gspread (most reliable method)
                         persist_ok = False
-                        if conn is not None:
-                            try:
-                                # write_sheet overwrites full sheet when using st.connection
-                                persist_ok = write_sheet(df)
-                                if not persist_ok:
-                                    st.warning("Local state updated but failed to persist full sheet via st.connection.")
-                            except Exception as e:
-                                st.warning(f"Local state updated but st.connection write failed: {e}")
-                        else:
-                            # gspread fallback: locate the row by ID or Name then update
-                            identifiers = {"ID": row.get("ID"), "Name": row.get("Name")}
-                            row_number = find_sheet_row_number(identifiers)
-                            if row_number:
-                                try:
-                                    persist_ok = update_row_by_number(row_number, {"Status": "Interested", "MatchStage": "Requested"})
-                                    if not persist_ok:
-                                        st.warning("Local state updated but failed to persist change via gspread.")
-                                except Exception as e:
-                                    st.warning(f"Local state updated but gspread update failed: {e}")
-                            
-                            # Always try to append as fallback to ensure persistence (creates a duplicate that founder can clean up)
-                            if not row_number or not persist_ok:
-                                try:
-                                    new_row = {"Name": row.get("Name",""), "ImageURL": row.get("ImageURL",""), "Status": "Interested", "MatchStage": "Requested", "Phone": row.get("Phone","")}
-                                    appended = append_row(new_row)
-                                    if appended:
-                                        st.info("Interest persisted by appending a new sheet record.")
-                                        # Reload immediately to show persistence
-                                        st.session_state.df = load_sheet()
-                                except Exception as e:
-                                    st.warning(f"Could not append persistence record: {e}")
 
-                        st.success("Interest recorded locally.")
+                        # Always use gspread for writes - it's more reliable than st.connection
+                        identifiers = {"ID": row.get("ID"), "Name": row.get("Name")}
+                        row_number = find_sheet_row_number(identifiers)
+
+                        if row_number:
+                            try:
+                                persist_ok = update_row_by_number(row_number, {"Status": "Interested", "MatchStage": "Requested"})
+                            except Exception as e:
+                                st.error(f"Failed to update sheet: {e}")
+
+                        if not persist_ok:
+                            st.error("Could not update the Google Sheet. Please check service account permissions.")
+                        else:
+                            st.success("Interest recorded!")
+
+                        # Reload data from sheet to reflect changes
+                        st.session_state.df = load_sheet()
+                        st.rerun()
                     st.markdown("</div>", unsafe_allow_html=True)
 
     elif view == "God Mode":
