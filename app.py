@@ -2,6 +2,9 @@ import streamlit as st
 import pandas as pd
 from urllib.parse import quote_plus
 from pathlib import Path
+import base64
+import io
+from PIL import Image
 
 st.set_page_config(page_title="Tingles — Boutique Matchmaking", layout="wide")
 
@@ -23,6 +26,48 @@ st.markdown(
 """,
     unsafe_allow_html=True,
 )
+
+# ============ IMAGE UPLOAD HELPER ============
+def upload_images_to_base64(uploaded_files, max_images=5):
+    """Convert uploaded images to base64 data URIs (max 5 images, compressed to <500KB each)."""
+    if not uploaded_files:
+        return ""
+
+    image_urls = []
+    for file in uploaded_files[:max_images]:
+        try:
+            # Read image
+            img = Image.open(file)
+
+            # Convert RGBA to RGB if necessary
+            if img.mode in ('RGBA', 'LA', 'P'):
+                background = Image.new('RGB', img.size, (255, 255, 255))
+                if img.mode == 'P':
+                    img = img.convert('RGBA')
+                background.paste(img, mask=img.split()[-1] if img.mode == 'RGBA' else None)
+                img = background
+
+            # Resize if too large (max 1200px width)
+            max_width = 1200
+            if img.width > max_width:
+                ratio = max_width / img.width
+                new_size = (max_width, int(img.height * ratio))
+                img = img.resize(new_size, Image.Resampling.LANCZOS)
+
+            # Convert to base64
+            buffered = io.BytesIO()
+            img.save(buffered, format="JPEG", quality=85, optimize=True)
+            img_str = base64.b64encode(buffered.getvalue()).decode()
+
+            # Create data URI
+            data_uri = f"data:image/jpeg;base64,{img_str}"
+            image_urls.append(data_uri)
+        except Exception as e:
+            st.warning(f"Failed to process {file.name}: {e}")
+            continue
+
+    # Return comma-separated URLs
+    return ", ".join(image_urls)
 
 # Prefer Streamlit's connection API, but fall back to gspread if unavailable
 conn = None
@@ -115,7 +160,15 @@ def init_gspread_from_toml():
     try:
         gspread_client = gspread.service_account_from_dict(creds)
         gspread_sh = gspread_client.open_by_url(spreadsheet)
-        gspread_ws = gspread_sh.sheet1
+        # Try to get "profiles" sheet (renamed from Sheet1)
+        try:
+            gspread_ws = gspread_sh.worksheet("profiles")
+        except Exception:
+            # Fallback to Sheet1 if profiles doesn't exist
+            try:
+                gspread_ws = gspread_sh.worksheet("Sheet1")
+            except Exception:
+                gspread_ws = gspread_sh.sheet1
     except Exception as e:
         return False, f"gspread init failed: {e}"
 
@@ -213,6 +266,42 @@ def add_credential(email, password, role="user"):
                 row_values.append('')
 
         credentials_ws.append_row(row_values)
+
+        # Auto-create basic profile in profiles sheet
+        try:
+            if gspread_ws is not None:
+                # Get current profiles to determine next ID
+                profiles_df = load_sheet()
+                if profiles_df is not None and not profiles_df.empty:
+                    try:
+                        existing_ids = pd.to_numeric(profiles_df.get("ID", pd.Series([])), errors="coerce").dropna()
+                        next_id = int(existing_ids.max()) + 1 if len(existing_ids) > 0 else 1
+                    except Exception:
+                        next_id = len(profiles_df) + 1
+                else:
+                    next_id = 1
+
+                # Get header from profiles sheet
+                profiles_header = gspread_ws.row_values(1)
+                profiles_header_lower = [h.lower().strip() for h in profiles_header]
+
+                # Build basic profile row
+                profile_row = []
+                for h in profiles_header_lower:
+                    if h == 'id':
+                        profile_row.append(str(next_id))
+                    elif h in ('email', 'email_address'):
+                        profile_row.append(email)
+                    elif h == 'status':
+                        profile_row.append('Active')
+                    else:
+                        profile_row.append('')  # Empty for other fields
+
+                gspread_ws.append_row(profile_row)
+        except Exception as profile_err:
+            # Don't fail signup if profile creation fails, just log it
+            pass
+
         return True, None
     except Exception as e:
         return False, f"Failed to add credential: {e}"
@@ -247,7 +336,11 @@ def write_sheet(df):
     """Overwrite entire sheet (only used when st.connection is available)."""
     if conn is not None:
         try:
-            conn.update(worksheet="Sheet1", data=df)
+            # Try profiles first, fallback to Sheet1
+            try:
+                conn.update(worksheet="profiles", data=df)
+            except Exception:
+                conn.update(worksheet="Sheet1", data=df)
             return True
         except Exception as e:
             st.error(f"Failed to write via st.connection: {e}")
@@ -860,14 +953,34 @@ else:
 
         st.markdown("<div class='profile-card'>", unsafe_allow_html=True)
 
-        # Image
+        # Images - support multiple comma-separated URLs
         img_raw = _scalar(row.get("PhotoURL", "") or row.get("ImageURL", ""))
-        img_url = resolve_image_url(img_raw) if img_raw else None
-        if img_url:
-            try:
-                st.image(img_url, width=300)
-            except Exception:
-                st.markdown("<div style='height:260px;background:#2a2a2a;border-radius:8px;display:flex;align-items:center;justify-content:center;color:#666'>Image unavailable</div>", unsafe_allow_html=True)
+        if img_raw and img_raw.strip():
+            # Split by comma for multiple images
+            img_urls = [url.strip() for url in img_raw.split(',') if url.strip()]
+
+            # Display images
+            if len(img_urls) == 1:
+                # Single image
+                img_url = resolve_image_url(img_urls[0])
+                if img_url:
+                    try:
+                        st.image(img_url, width=300)
+                    except Exception:
+                        st.markdown("<div style='height:260px;background:#2a2a2a;border-radius:8px;display:flex;align-items:center;justify-content:center;color:#666'>Image unavailable</div>", unsafe_allow_html=True)
+                else:
+                    st.markdown("<div style='height:260px;background:#2a2a2a;border-radius:8px;display:flex;align-items:center;justify-content:center;color:#666'>No image</div>", unsafe_allow_html=True)
+            else:
+                # Multiple images - show in tabs
+                img_tabs = st.tabs([f"Photo {i+1}" for i in range(len(img_urls[:5]))])
+                for idx, (tab, url) in enumerate(zip(img_tabs, img_urls[:5])):
+                    with tab:
+                        resolved_url = resolve_image_url(url)
+                        if resolved_url:
+                            try:
+                                st.image(resolved_url, width=300)
+                            except Exception:
+                                st.markdown("<div style='height:260px;background:#2a2a2a;border-radius:8px;display:flex;align-items:center;justify-content:center;color:#666'>Image unavailable</div>", unsafe_allow_html=True)
         else:
             st.markdown("<div style='height:260px;background:#2a2a2a;border-radius:8px;display:flex;align-items:center;justify-content:center;color:#666'>No image</div>", unsafe_allow_html=True)
 
@@ -978,7 +1091,33 @@ else:
                     cp_location = st.text_input("Location", placeholder="e.g., Mumbai, India")
 
                 cp_linkedin = st.text_input("LinkedIn URL", placeholder="https://linkedin.com/in/yourprofile")
-                cp_photo = st.text_input("Photo URL", placeholder="Direct link to your photo (e.g., from ibb.co)")
+
+                st.markdown("#### Upload Photos (up to 5)")
+                st.markdown("<p style='color:#a0a0a0; font-size:14px;'>Upload images from your computer. Supported formats: JPG, PNG, WEBP</p>", unsafe_allow_html=True)
+
+                uploaded_files = st.file_uploader(
+                    "Choose images",
+                    type=["jpg", "jpeg", "png", "webp"],
+                    accept_multiple_files=True,
+                    key="create_profile_images",
+                    label_visibility="collapsed"
+                )
+
+                # Show image previews
+                if uploaded_files:
+                    if len(uploaded_files) > 5:
+                        st.warning("Maximum 5 images allowed. Only the first 5 will be used.")
+                        uploaded_files = uploaded_files[:5]
+
+                    cols = st.columns(min(len(uploaded_files), 5))
+                    for idx, (col, file) in enumerate(zip(cols, uploaded_files)):
+                        with col:
+                            st.image(file, caption=f"Image {idx+1}", width=100)
+
+                # Also allow URL input as fallback
+                st.markdown("##### Or enter image URLs (comma-separated)")
+                cp_photo = st.text_input("Photo URLs", placeholder="https://example.com/image1.jpg, https://example.com/image2.jpg", label_visibility="collapsed")
+
                 cp_bio = st.text_area("Bio", placeholder="Tell us about yourself, your interests, and what you're looking for...", height=120)
 
                 if st.form_submit_button("Create Profile", use_container_width=True):
@@ -991,6 +1130,21 @@ else:
                             next_id = int(existing_ids.max()) + 1 if len(existing_ids) > 0 else 1
                         except Exception:
                             next_id = len(df) + 1
+
+                        # Process uploaded images
+                        photo_urls = []
+                        if uploaded_files:
+                            with st.spinner("Processing images..."):
+                                base64_urls = upload_images_to_base64(uploaded_files)
+                                if base64_urls:
+                                    photo_urls.append(base64_urls)
+
+                        # Add manually entered URLs
+                        if cp_photo and cp_photo.strip():
+                            photo_urls.append(cp_photo.strip())
+
+                        # Combine all photo URLs
+                        final_photo_url = ", ".join(photo_urls) if photo_urls else ""
 
                         new_profile = {
                             "ID": str(next_id),
@@ -1006,7 +1160,7 @@ else:
                             "Residency_Status": cp_residency,
                             "Location": cp_location,
                             "LinkedIn": cp_linkedin,
-                            "PhotoURL": cp_photo,
+                            "PhotoURL": final_photo_url,
                             "Bio": cp_bio,
                             "Status": "Active"
                         }
@@ -1067,10 +1221,51 @@ else:
                     new_location = st.text_input("Location", value=my_profile.get('Location', '') or '')
 
                 new_linkedin = st.text_input("LinkedIn URL", value=my_profile.get('LinkedIn', '') or '')
-                new_photo = st.text_input("Photo URL", value=my_profile.get('PhotoURL', '') or my_profile.get('ImageURL', '') or '')
+
+                st.markdown("#### Update Photos (up to 5)")
+                st.markdown("<p style='color:#a0a0a0; font-size:14px;'>Upload new images or keep existing. Uploading new images will replace old ones.</p>", unsafe_allow_html=True)
+
+                edit_uploaded_files = st.file_uploader(
+                    "Choose new images",
+                    type=["jpg", "jpeg", "png", "webp"],
+                    accept_multiple_files=True,
+                    key="edit_profile_images",
+                    label_visibility="collapsed"
+                )
+
+                # Show image previews
+                if edit_uploaded_files:
+                    if len(edit_uploaded_files) > 5:
+                        st.warning("Maximum 5 images allowed. Only the first 5 will be used.")
+                        edit_uploaded_files = edit_uploaded_files[:5]
+
+                    cols = st.columns(min(len(edit_uploaded_files), 5))
+                    for idx, (col, file) in enumerate(zip(cols, edit_uploaded_files)):
+                        with col:
+                            st.image(file, caption=f"New Image {idx+1}", width=100)
+
+                # Also allow URL input
+                st.markdown("##### Or enter image URLs (comma-separated)")
+                new_photo = st.text_input("Photo URLs", value=my_profile.get('PhotoURL', '') or my_profile.get('ImageURL', '') or '', label_visibility="collapsed")
+
                 new_bio = st.text_area("Bio", value=my_profile.get('Bio', '') or '', height=100)
 
                 if st.form_submit_button("Save Changes", use_container_width=True):
+                    # Process uploaded images
+                    photo_urls = []
+                    if edit_uploaded_files:
+                        with st.spinner("Processing images..."):
+                            base64_urls = upload_images_to_base64(edit_uploaded_files)
+                            if base64_urls:
+                                photo_urls.append(base64_urls)
+
+                    # Add manually entered URLs (or keep existing if not changed)
+                    if new_photo and new_photo.strip():
+                        photo_urls.append(new_photo.strip())
+
+                    # Combine all photo URLs
+                    final_photo_url = ", ".join(photo_urls) if photo_urls else new_photo
+
                     if update_profile_by_email(st.session_state.user_email, {
                         'Age': new_age,
                         'Height': new_height,
@@ -1080,7 +1275,7 @@ else:
                         'Religion': new_religion,
                         'Location': new_location,
                         'LinkedIn': new_linkedin,
-                        'PhotoURL': new_photo,
+                        'PhotoURL': final_photo_url,
                         'Bio': new_bio
                     }):
                         st.success("Profile updated successfully!")
