@@ -7,11 +7,11 @@
   --card: #1c1c1c;            /* Card background */
   --text: #f5f5f5;            /* Light text */
   --text-secondary: #a0a0a0;  /* Muted text */
-  --accent: #dc2626;          /* Vibrant red */
-  --accent-hover: #ef4444;    /* Lighter red for hover */
-  --accent-dark: #991b1b;     /* Darker red */
-  --border: rgba(220, 38, 38, 0.2); /* Red tinted border */
-  --shadow: rgba(220, 38, 38, 0.15); /* Red glow shadow */
+  --accent: #8b0000;          /* Deep dark red */
+  --accent-hover: #a52a2a;    /* Brown-red for hover */
+  --accent-dark: #5f0000;     /* Very dark red */
+  --border: rgba(139, 0, 0, 0.25); /* Deep red tinted border */
+  --shadow: rgba(139, 0, 0, 0.2); /* Deep red glow shadow */
   --gold: #d4af37;            /* Gold accent for premium feel */
 }
 

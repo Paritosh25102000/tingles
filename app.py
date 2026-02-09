@@ -1120,7 +1120,7 @@ else:
                     all_emails = [e for e in all_emails if str(e).strip()]
 
                     if len(all_emails) < 2:
-                        st.warning("Need at least 2 profiles to create suggestions.")
+                        st.info(f"📋 You have {len(all_emails)} profile(s) with email. Need at least 2 profiles to create suggestions. Add more profiles in the 'Manage Profiles' tab.")
                     else:
                         selected_user = st.selectbox(
                             "Select User (receives suggestion)",
