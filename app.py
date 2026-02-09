@@ -356,7 +356,24 @@ def write_sheet(df):
 def append_row(row_dict):
     if conn is not None:
         try:
-            conn.write(row_dict, mode="append")
+            # Normalize column names to match sheet headers
+            # Get current sheet to check actual column names
+            current_df = load_sheet()
+            if current_df is not None and not current_df.empty:
+                # Map row_dict keys to actual column names (case-insensitive)
+                actual_cols = {col.lower().strip(): col for col in current_df.columns}
+                normalized_dict = {}
+                for key, value in row_dict.items():
+                    key_lower = key.lower().strip()
+                    if key_lower in actual_cols:
+                        # Use the actual column name from the sheet
+                        normalized_dict[actual_cols[key_lower]] = value
+                    else:
+                        # Keep original key if no match found
+                        normalized_dict[key] = value
+                conn.write(normalized_dict, mode="append")
+            else:
+                conn.write(row_dict, mode="append")
             return True
         except Exception as e:
             st.error(f"Failed to append via st.connection: {e}")
@@ -373,14 +390,26 @@ def append_row(row_dict):
         alias_map_local = {
             "name": "Name",
             "full_name": "Name",
-            "photo_url": "ImageURL",
-            "imageurl": "ImageURL",
-            "image_url": "ImageURL",
+            "email": "Email",
+            "email_address": "Email",
+            "photo_url": "PhotoURL",
+            "photourl": "PhotoURL",
+            "imageurl": "PhotoURL",
+            "image_url": "PhotoURL",
             "height": "Height",
+            "profession": "Profession",
             "industry": "Industry",
             "education": "Education",
+            "religion": "Religion",
+            "residency_status": "Residency_Status",
+            "residency": "Residency_Status",
+            "location": "Location",
+            "bio": "Bio",
+            "gender": "Gender",
+            "age": "Age",
             "linkedin_url": "LinkedIn",
             "linkedin": "LinkedIn",
+            "whatsapp": "WhatsApp",
             "status": "Status",
             "match_stage": "MatchStage",
             "matchstage": "MatchStage",
