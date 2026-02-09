@@ -28,8 +28,8 @@ st.markdown(
 )
 
 # ============ IMAGE UPLOAD HELPER ============
-def upload_images_to_base64(uploaded_files, max_images=5):
-    """Convert uploaded images to base64 data URIs (max 5 images, compressed to <500KB each)."""
+def upload_images_to_base64(uploaded_files, max_images=3):
+    """Convert uploaded images to base64 data URIs (max 3 images, compressed to <500KB each)."""
     if not uploaded_files:
         return ""
 
@@ -1096,7 +1096,7 @@ else:
         if my_profile is None:
             # Profile not found - show create profile form
             st.info("Welcome! Please complete your profile to get started.")
-            st.markdown("<p style='color:#a0a0a0;'>Fill in your details below to create your profile.</p>", unsafe_allow_html=True)
+            st.markdown("<p style='color:#a0a0a0;'>Fill in your details below to complete your profile.</p>", unsafe_allow_html=True)
 
             with st.form("create_profile"):
                 cp_name = st.text_input("Full Name *", placeholder="Enter your full name")
@@ -1129,8 +1129,8 @@ else:
 
                 cp_linkedin = st.text_input("LinkedIn URL", placeholder="https://linkedin.com/in/yourprofile")
 
-                st.markdown("#### Upload Photos (up to 5)")
-                st.markdown("<p style='color:#a0a0a0; font-size:14px;'>Upload images from your computer. Supported formats: JPG, PNG, WEBP</p>", unsafe_allow_html=True)
+                st.markdown("#### Upload Photos (up to 3)")
+                st.markdown("<p style='color:#a0a0a0; font-size:14px;'>⚠️ Limit 3 photos to avoid storage issues. For more photos, use image URLs below.</p>", unsafe_allow_html=True)
 
                 uploaded_files = st.file_uploader(
                     "Choose images",
@@ -1142,22 +1142,22 @@ else:
 
                 # Show image previews
                 if uploaded_files:
-                    if len(uploaded_files) > 5:
-                        st.warning("Maximum 5 images allowed. Only the first 5 will be used.")
-                        uploaded_files = uploaded_files[:5]
+                    if len(uploaded_files) > 3:
+                        st.warning("Maximum 3 images allowed. Only the first 3 will be used.")
+                        uploaded_files = uploaded_files[:3]
 
-                    cols = st.columns(min(len(uploaded_files), 5))
+                    cols = st.columns(min(len(uploaded_files), 3))
                     for idx, (col, file) in enumerate(zip(cols, uploaded_files)):
                         with col:
                             st.image(file, caption=f"Image {idx+1}", width=100)
 
                 # Also allow URL input as fallback
-                st.markdown("##### Or enter image URLs (comma-separated)")
+                st.markdown("##### Or enter image URLs (comma-separated, recommended)")
                 cp_photo = st.text_input("Photo URLs", placeholder="https://example.com/image1.jpg, https://example.com/image2.jpg", label_visibility="collapsed")
 
                 cp_bio = st.text_area("Bio", placeholder="Tell us about yourself, your interests, and what you're looking for...", height=120)
 
-                if st.form_submit_button("Create Profile", use_container_width=True):
+                if st.form_submit_button("Complete Profile", use_container_width=True):
                     if not cp_name:
                         st.error("Please enter your full name.")
                     else:
@@ -1183,32 +1183,36 @@ else:
                         # Combine all photo URLs
                         final_photo_url = ", ".join(photo_urls) if photo_urls else ""
 
-                        new_profile = {
-                            "ID": str(next_id),
-                            "Email": st.session_state.user_email,
-                            "Name": cp_name,
-                            "Gender": cp_gender,
-                            "Age": cp_age,
-                            "Height": cp_height,
-                            "Profession": cp_profession,
-                            "Industry": cp_industry,
-                            "Education": cp_education,
-                            "Religion": cp_religion,
-                            "Residency_Status": cp_residency,
-                            "Location": cp_location,
-                            "LinkedIn": cp_linkedin,
-                            "PhotoURL": final_photo_url,
-                            "Bio": cp_bio,
-                            "Status": "Active"
-                        }
-
-                        if append_row(new_profile):
-                            st.success("Profile created successfully!")
-                            # Force refresh to bypass cache
-                            st.session_state.df = load_sheet(force_refresh=True)
-                            st.rerun()
+                        # Validate photo URL length (Google Sheets has 50,000 char limit per cell)
+                        if len(final_photo_url) > 45000:
+                            st.error("❌ Photo data is too large (>45,000 characters). Please use fewer uploaded images or use image URLs instead of uploading files.")
                         else:
-                            st.error("Failed to create profile. Please try again.")
+                            new_profile = {
+                                "ID": str(next_id),
+                                "Email": st.session_state.user_email,
+                                "Name": cp_name,
+                                "Gender": cp_gender,
+                                "Age": cp_age,
+                                "Height": cp_height,
+                                "Profession": cp_profession,
+                                "Industry": cp_industry,
+                                "Education": cp_education,
+                                "Religion": cp_religion,
+                                "Residency_Status": cp_residency,
+                                "Location": cp_location,
+                                "LinkedIn": cp_linkedin,
+                                "PhotoURL": final_photo_url,
+                                "Bio": cp_bio,
+                                "Status": "Active"
+                            }
+
+                            if append_row(new_profile):
+                                st.success("Profile created successfully!")
+                                # Force refresh to bypass cache
+                                st.session_state.df = load_sheet(force_refresh=True)
+                                st.rerun()
+                            else:
+                                st.error("Failed to create profile. Please try again.")
         else:
             col1, col2 = st.columns([1, 2])
             with col1:
@@ -1280,8 +1284,8 @@ else:
 
                 new_linkedin = st.text_input("LinkedIn URL", value=my_profile.get('LinkedIn', '') or '')
 
-                st.markdown("#### Update Photos (up to 5)")
-                st.markdown("<p style='color:#a0a0a0; font-size:14px;'>Upload new images or keep existing. Uploading new images will replace old ones.</p>", unsafe_allow_html=True)
+                st.markdown("#### Update Photos (up to 3)")
+                st.markdown("<p style='color:#a0a0a0; font-size:14px;'>⚠️ Limit 3 photos to avoid storage issues. For more photos, use image URLs below.</p>", unsafe_allow_html=True)
 
                 edit_uploaded_files = st.file_uploader(
                     "Choose new images",
@@ -1293,17 +1297,17 @@ else:
 
                 # Show image previews
                 if edit_uploaded_files:
-                    if len(edit_uploaded_files) > 5:
-                        st.warning("Maximum 5 images allowed. Only the first 5 will be used.")
-                        edit_uploaded_files = edit_uploaded_files[:5]
+                    if len(edit_uploaded_files) > 3:
+                        st.warning("Maximum 3 images allowed. Only the first 3 will be used.")
+                        edit_uploaded_files = edit_uploaded_files[:3]
 
-                    cols = st.columns(min(len(edit_uploaded_files), 5))
+                    cols = st.columns(min(len(edit_uploaded_files), 3))
                     for idx, (col, file) in enumerate(zip(cols, edit_uploaded_files)):
                         with col:
                             st.image(file, caption=f"New Image {idx+1}", width=100)
 
                 # Also allow URL input
-                st.markdown("##### Or enter image URLs (comma-separated)")
+                st.markdown("##### Or enter image URLs (comma-separated, recommended)")
                 new_photo = st.text_input("Photo URLs", value=my_profile.get('PhotoURL', '') or my_profile.get('ImageURL', '') or '', label_visibility="collapsed")
 
                 new_bio = st.text_area("Bio", value=my_profile.get('Bio', '') or '', height=100)
@@ -1313,7 +1317,7 @@ else:
                     photo_urls = []
                     if edit_uploaded_files:
                         with st.spinner("Processing images..."):
-                            base64_urls = upload_images_to_base64(edit_uploaded_files)
+                            base64_urls = upload_images_to_base64(edit_uploaded_files, max_images=3)
                             if base64_urls:
                                 photo_urls.append(base64_urls)
 
@@ -1324,7 +1328,10 @@ else:
                     # Combine all photo URLs
                     final_photo_url = ", ".join(photo_urls) if photo_urls else new_photo
 
-                    if update_profile_by_email(st.session_state.user_email, {
+                    # Validate photo URL length (Google Sheets has 50,000 char limit per cell)
+                    if len(final_photo_url) > 45000:
+                        st.error("❌ Photo data is too large (>45,000 characters). Please use fewer uploaded images or use image URLs instead of uploading files.")
+                    elif update_profile_by_email(st.session_state.user_email, {
                         'Age': new_age,
                         'Height': new_height,
                         'Profession': new_profession,
