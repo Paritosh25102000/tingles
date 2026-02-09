@@ -307,10 +307,15 @@ def add_credential(email, password, role="user"):
         return False, f"Failed to add credential: {e}"
 
 # Sheet helpers supporting both conn and gspread fallback
-def load_sheet():
+def load_sheet(force_refresh=False):
+    """Load the profiles sheet. Set force_refresh=True to bypass cache."""
     if conn is not None:
         try:
-            df = conn.read()
+            # Use ttl=0 to bypass cache if force_refresh requested
+            if force_refresh:
+                df = conn.read(ttl=0)
+            else:
+                df = conn.read()
             if isinstance(df, pd.DataFrame):
                 return df
             return pd.DataFrame(df)
@@ -635,9 +640,10 @@ def suggestion_exists(suggested_to_email, profile_of_email):
     return not existing.empty
 
 
-def get_profile_by_email(email):
-    """Get a single profile by email. Returns dict or None."""
-    profiles_df = load_sheet()
+def get_profile_by_email(email, force_refresh=False):
+    """Get a single profile by email. Returns dict or None.
+    Set force_refresh=True to bypass cache and get fresh data from sheet."""
+    profiles_df = load_sheet(force_refresh=force_refresh)
     if profiles_df is None or profiles_df.empty:
         return None
 
@@ -1070,7 +1076,8 @@ else:
     elif view == "My Profile":
         st.header("My Profile")
 
-        my_profile = get_profile_by_email(st.session_state.user_email)
+        # Force refresh to get latest data (important after profile creation/edit)
+        my_profile = get_profile_by_email(st.session_state.user_email, force_refresh=True)
 
         if my_profile is None:
             # Profile not found - show create profile form
@@ -1183,7 +1190,8 @@ else:
 
                         if append_row(new_profile):
                             st.success("Profile created successfully!")
-                            st.session_state.df = load_sheet()
+                            # Force refresh to bypass cache
+                            st.session_state.df = load_sheet(force_refresh=True)
                             st.rerun()
                         else:
                             st.error("Failed to create profile. Please try again.")
@@ -1317,6 +1325,8 @@ else:
                         'Bio': new_bio
                     }):
                         st.success("Profile updated successfully!")
+                        # Force refresh to show updated data
+                        st.session_state.df = load_sheet(force_refresh=True)
                         st.rerun()
                     else:
                         st.error("Failed to update profile. Please try again.")
