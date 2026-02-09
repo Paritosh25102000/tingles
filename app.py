@@ -688,11 +688,27 @@ def update_profile_by_email(email, updates: dict):
         if not row_number:
             return False
 
-        # Update cells
+        # Build case-insensitive column mapping
+        # Map lowercase column names to their positions and actual names
+        col_map = {}
         for col_idx, col_name in enumerate(header, start=1):
-            if col_name in updates:
-                gspread_ws.update_cell(row_number, col_idx, updates[col_name])
-        return True
+            col_map[col_name.lower().strip()] = (col_idx, col_name)
+
+        # Update cells - match both exact case and lowercase
+        updates_made = 0
+        for update_key, update_value in updates.items():
+            # Try exact match first
+            if update_key in header:
+                col_idx = header.index(update_key) + 1
+                gspread_ws.update_cell(row_number, col_idx, update_value)
+                updates_made += 1
+            # Try case-insensitive match
+            elif update_key.lower().strip() in col_map:
+                col_idx, actual_name = col_map[update_key.lower().strip()]
+                gspread_ws.update_cell(row_number, col_idx, update_value)
+                updates_made += 1
+
+        return updates_made > 0
     except Exception as e:
         st.error(f"Profile update failed: {e}")
         return False
@@ -1186,14 +1202,28 @@ else:
             with col2:
                 st.markdown(f"### {my_profile.get('Name', 'Unknown')}")
                 st.markdown(f"**Email:** {my_profile.get('Email', '')}")
-                st.markdown(f"**Age:** {my_profile.get('Age', 'N/A')}")
-                st.markdown(f"**Gender:** {my_profile.get('Gender', 'N/A')}")
-                st.markdown(f"**Height:** {my_profile.get('Height', 'N/A')}")
-                st.markdown(f"**Profession:** {my_profile.get('Profession', 'N/A')}")
-                st.markdown(f"**Industry:** {my_profile.get('Industry', 'N/A')}")
-                st.markdown(f"**Education:** {my_profile.get('Education', 'N/A')}")
-                st.markdown(f"**Religion:** {my_profile.get('Religion', 'N/A')}")
-                st.markdown(f"**Location:** {my_profile.get('Location', 'N/A')}")
+
+                col_a, col_b = st.columns(2)
+                with col_a:
+                    st.markdown(f"**Age:** {my_profile.get('Age', 'N/A')}")
+                    st.markdown(f"**Gender:** {my_profile.get('Gender', 'N/A')}")
+                    st.markdown(f"**Height:** {my_profile.get('Height', 'N/A')}")
+                    st.markdown(f"**Profession:** {my_profile.get('Profession', 'N/A')}")
+                    st.markdown(f"**Industry:** {my_profile.get('Industry', 'N/A')}")
+
+                with col_b:
+                    st.markdown(f"**Education:** {my_profile.get('Education', 'N/A')}")
+                    st.markdown(f"**Religion:** {my_profile.get('Religion', 'N/A')}")
+                    st.markdown(f"**Location:** {my_profile.get('Location', 'N/A')}")
+                    st.markdown(f"**Residency:** {my_profile.get('Residency_Status', 'N/A')}")
+                    st.markdown(f"**WhatsApp:** {my_profile.get('WhatsApp', 'N/A')}")
+
+                if my_profile.get('LinkedIn'):
+                    st.markdown(f"**LinkedIn:** [View Profile]({my_profile.get('LinkedIn')})")
+
+                if my_profile.get('Bio'):
+                    st.markdown("**Bio:**")
+                    st.markdown(f"<p style='color:#a0a0a0;'>{my_profile.get('Bio', '')}</p>", unsafe_allow_html=True)
 
             st.markdown("---")
             st.subheader("Edit Your Profile")
@@ -1219,6 +1249,12 @@ else:
                     new_religion = st.text_input("Religion", value=my_profile.get('Religion', '') or '')
                 with col7:
                     new_location = st.text_input("Location", value=my_profile.get('Location', '') or '')
+
+                col8, col9 = st.columns(2)
+                with col8:
+                    new_residency = st.text_input("Residency Status", value=my_profile.get('Residency_Status', '') or '')
+                with col9:
+                    new_whatsapp = st.text_input("WhatsApp", value=my_profile.get('WhatsApp', '') or '')
 
                 new_linkedin = st.text_input("LinkedIn URL", value=my_profile.get('LinkedIn', '') or '')
 
@@ -1274,6 +1310,8 @@ else:
                         'Education': new_education,
                         'Religion': new_religion,
                         'Location': new_location,
+                        'Residency_Status': new_residency,
+                        'WhatsApp': new_whatsapp,
                         'LinkedIn': new_linkedin,
                         'PhotoURL': final_photo_url,
                         'Bio': new_bio
