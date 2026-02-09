@@ -267,40 +267,8 @@ def add_credential(email, password, role="user"):
 
         credentials_ws.append_row(row_values)
 
-        # Auto-create basic profile in profiles sheet
-        try:
-            if gspread_ws is not None:
-                # Get current profiles to determine next ID
-                profiles_df = load_sheet()
-                if profiles_df is not None and not profiles_df.empty:
-                    try:
-                        existing_ids = pd.to_numeric(profiles_df.get("ID", pd.Series([])), errors="coerce").dropna()
-                        next_id = int(existing_ids.max()) + 1 if len(existing_ids) > 0 else 1
-                    except Exception:
-                        next_id = len(profiles_df) + 1
-                else:
-                    next_id = 1
-
-                # Get header from profiles sheet
-                profiles_header = gspread_ws.row_values(1)
-                profiles_header_lower = [h.lower().strip() for h in profiles_header]
-
-                # Build basic profile row
-                profile_row = []
-                for h in profiles_header_lower:
-                    if h == 'id':
-                        profile_row.append(str(next_id))
-                    elif h in ('email', 'email_address'):
-                        profile_row.append(email)
-                    elif h == 'status':
-                        profile_row.append('Active')
-                    else:
-                        profile_row.append('')  # Empty for other fields
-
-                gspread_ws.append_row(profile_row)
-        except Exception as profile_err:
-            # Don't fail signup if profile creation fails, just log it
-            pass
+        # Note: We don't auto-create a profile stub anymore
+        # Users will create their full profile after first login
 
         return True, None
     except Exception as e:
@@ -818,9 +786,7 @@ def logout():
 
 # ============ LOGIN / SIGNUP PAGE ============
 if not st.session_state.logged_in:
-    st.markdown("<div style='text-align: center; padding: 40px 20px;'>", unsafe_allow_html=True)
-    st.markdown("<h2 style='font-family: Playfair Display, serif; font-size: 48px; margin-bottom: 20px;'>Welcome to Tingles</h2>", unsafe_allow_html=True)
-    st.markdown("<p style='font-size: 18px; color: #98a2ab; margin-bottom: 30px;'>Boutique Matchmaking Platform</p>", unsafe_allow_html=True)
+    st.markdown("<div style='padding: 40px 20px;'>", unsafe_allow_html=True)
 
     login_col1, login_col2, login_col3 = st.columns([1, 2, 1])
     with login_col2:
