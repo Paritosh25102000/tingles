@@ -672,7 +672,43 @@ def get_profile_by_email(email, force_refresh=False):
             cleaned_profile[key] = ''
         else:
             cleaned_profile[key] = str(value).strip() if value else ''
-    return cleaned_profile
+
+    # Normalize keys to match expected format (handle both lowercase and Pascal case)
+    # Map common lowercase variations to expected keys
+    key_mapping = {
+        'id': 'ID',
+        'email': 'Email',
+        'name': 'Name',
+        'gender': 'Gender',
+        'age': 'Age',
+        'height': 'Height',
+        'profession': 'Profession',
+        'industry': 'Industry',
+        'education': 'Education',
+        'religion': 'Religion',
+        'residency_status': 'Residency_Status',
+        'location': 'Location',
+        'linkedin_url': 'LinkedIn',
+        'linkedin': 'LinkedIn',
+        'photo_url': 'PhotoURL',
+        'photourl': 'PhotoURL',
+        'imageurl': 'ImageURL',
+        'bio': 'Bio',
+        'status': 'Status',
+        'match_stage': 'MatchStage',
+        'whatsapp': 'WhatsApp'
+    }
+
+    normalized_profile = {}
+    for key, value in cleaned_profile.items():
+        # Skip computed columns
+        if key.startswith('_'):
+            continue
+        # Normalize the key
+        normalized_key = key_mapping.get(key.lower(), key)
+        normalized_profile[normalized_key] = value
+
+    return normalized_profile
 
 
 def update_profile_by_email(email, updates: dict):
