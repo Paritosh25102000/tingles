@@ -1359,7 +1359,7 @@ else:
                     render_profile_card(row, show_interest_button=False, card_index=i)
 
     elif view == "God Mode":
-        st.header("God Mode — Founder Tools")
+        st.markdown("<h2 style='text-align: center;'>God Mode Tools</h2>", unsafe_allow_html=True)
         if not is_founder:
             st.warning("Founder access required. Please log in with a founder account.")
         else:
