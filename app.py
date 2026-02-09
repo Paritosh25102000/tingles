@@ -661,7 +661,18 @@ def get_profile_by_email(email, force_refresh=False):
 
     if match.empty:
         return None
-    return match.iloc[0].to_dict()
+
+    # Convert to dict and handle NaN values
+    profile_dict = match.iloc[0].to_dict()
+    # Replace NaN/None with empty strings for cleaner display
+    import math
+    cleaned_profile = {}
+    for key, value in profile_dict.items():
+        if value is None or (isinstance(value, float) and math.isnan(value)):
+            cleaned_profile[key] = ''
+        else:
+            cleaned_profile[key] = str(value).strip() if value else ''
+    return cleaned_profile
 
 
 def update_profile_by_email(email, updates: dict):
@@ -1214,6 +1225,13 @@ else:
                             else:
                                 st.error("Failed to create profile. Please try again.")
         else:
+            # DEBUG: Show raw profile data
+            with st.expander("🔍 Debug: Raw Profile Data", expanded=False):
+                st.write("**Profile dictionary keys:**", list(my_profile.keys()))
+                st.write("**Profile data:**")
+                for key, value in my_profile.items():
+                    st.write(f"- `{key}`: `{value}` (type: {type(value).__name__})")
+
             col1, col2 = st.columns([1, 2])
             with col1:
                 img_url = resolve_image_url(my_profile.get('PhotoURL', '') or my_profile.get('ImageURL', ''))
