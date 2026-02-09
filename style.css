@@ -1,32 +1,83 @@
-@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700;800&family=Inter:wght@300;400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap');
 
-:root{
-  --bg: #0a0a0a;              /* Deep black background */
-  --bg-secondary: #141414;    /* Slightly lighter black */
-  --panel: #1a1a1a;           /* Dark panel */
-  --card: #1c1c1c;            /* Card background */
-  --text: #f5f5f5;            /* Light text */
-  --text-secondary: #a0a0a0;  /* Muted text */
-  --accent: #8b0000;          /* Deep dark red */
-  --accent-hover: #a52a2a;    /* Brown-red for hover */
-  --accent-dark: #5f0000;     /* Very dark red */
-  --border: rgba(139, 0, 0, 0.25); /* Deep red tinted border */
-  --shadow: rgba(139, 0, 0, 0.2); /* Deep red glow shadow */
-  --gold: #d4af37;            /* Gold accent for premium feel */
+:root {
+  --bg: #0A0A0A;
+  --text-primary: #FFFFFF;
+  --text-muted: #A1A1AA;
+  --accent-rose: #FF6B6B;
+  --accent-coral: #FF8E53;
+  --accent-violet: #8B5CF6;
+  --glass-bg: rgba(255, 255, 255, 0.05);
+  --glass-border: rgba(255, 255, 255, 0.1);
 }
 
+/* Background with noise texture and floating orbs */
 html, body, [class*="css"] {
   background: var(--bg) !important;
-  color: var(--text) !important;
-  font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial !important;
+  color: var(--text-muted) !important;
+  font-family: 'Inter', 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif !important;
   font-weight: 400;
   font-size: 16px;
   line-height: 1.6;
+  position: relative;
+  overflow-x: hidden;
+}
+
+/* Noise texture overlay */
+body::before {
+  content: '';
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0.03;
+  z-index: 0;
+  pointer-events: none;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 400 400' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='4' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E");
+}
+
+/* Floating gradient orbs */
+.stApp::before,
+.stApp::after {
+  content: '';
+  position: fixed;
+  border-radius: 50%;
+  filter: blur(80px);
+  opacity: 0.15;
+  pointer-events: none;
+  z-index: 0;
+  animation: float 20s ease-in-out infinite;
+}
+
+.stApp::before {
+  top: -100px;
+  right: -100px;
+  width: 500px;
+  height: 500px;
+  background: radial-gradient(circle, var(--accent-rose), var(--accent-coral));
+  animation-delay: -5s;
+}
+
+.stApp::after {
+  bottom: -150px;
+  left: -150px;
+  width: 600px;
+  height: 600px;
+  background: radial-gradient(circle, var(--accent-violet), var(--accent-coral));
+}
+
+@keyframes float {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  33% { transform: translate(30px, -30px) scale(1.1); }
+  66% { transform: translate(-20px, 20px) scale(0.9); }
 }
 
 /* Streamlit main container */
 .stApp {
   background: var(--bg) !important;
+  position: relative;
+  z-index: 1;
 }
 
 /* Hide Streamlit chrome */
@@ -36,29 +87,44 @@ header, footer, #MainMenu {
 
 /* Brand */
 .app-container .brand {
-  margin-bottom: 30px;
+  margin-bottom: 40px;
   text-align: center;
+  position: relative;
+  z-index: 10;
 }
+
 .app-container .brand h1 {
   margin: 0;
-  font-size: 72px;
-  letter-spacing: 2px;
-  font-family: 'Playfair Display', serif;
+  font-size: 4rem;
+  letter-spacing: -0.02em;
+  font-family: 'Plus Jakarta Sans', 'Inter', sans-serif;
   font-weight: 800;
-  color: var(--accent);
-  text-shadow: 0 0 40px rgba(220, 38, 38, 0.3);
+  background: linear-gradient(135deg, var(--accent-rose) 0%, var(--accent-coral) 50%, var(--accent-violet) 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  filter: drop-shadow(0 0 30px rgba(255, 107, 107, 0.3));
 }
+
 .app-container .brand .tag {
-  margin-top: 10px;
-  color: var(--gold);
-  font-size: 16px;
-  letter-spacing: 4px;
+  margin-top: 12px;
+  color: var(--text-muted);
+  font-size: 1.1rem;
+  letter-spacing: 3px;
   text-transform: uppercase;
-  font-weight: 500;
+  font-weight: 300;
+  max-width: 600px;
+  margin-left: auto;
+  margin-right: auto;
 }
 
 /* Layout */
-.stApp > main { padding-top: 20px; }
+.stApp > main {
+  padding-top: 20px;
+  position: relative;
+  z-index: 10;
+}
+
 .block-container {
   max-width: 1200px;
   margin-left: auto;
@@ -66,194 +132,273 @@ header, footer, #MainMenu {
   padding: 2rem 1rem;
 }
 
-/* Sidebar */
+/* Sidebar - Glassmorphic */
 [data-testid="stSidebar"] {
-  background: var(--panel) !important;
-  border-right: 1px solid var(--border);
+  background: var(--glass-bg) !important;
+  backdrop-filter: blur(20px) !important;
+  -webkit-backdrop-filter: blur(20px) !important;
+  border-right: 1px solid var(--glass-border) !important;
 }
+
 [data-testid="stSidebar"] * {
-  color: var(--text) !important;
+  color: var(--text-primary) !important;
 }
+
 [data-testid="stSidebar"] .stMarkdown p {
   font-size: 15px;
+  color: var(--text-muted) !important;
 }
+
 [data-testid="stSidebar"] a {
-  color: var(--accent) !important;
+  color: var(--accent-coral) !important;
 }
 
-/* Sidebar radio buttons */
+/* Sidebar radio buttons - Glassmorphic */
 [data-testid="stSidebar"] .stRadio > div {
-  gap: 8px;
-}
-[data-testid="stSidebar"] .stRadio label {
-  background: var(--bg-secondary) !important;
-  border: 1px solid var(--border) !important;
-  border-radius: 8px !important;
-  padding: 12px 16px !important;
-  transition: all 0.2s ease !important;
-}
-[data-testid="stSidebar"] .stRadio label:hover {
-  border-color: var(--accent) !important;
-  background: rgba(220, 38, 38, 0.1) !important;
-}
-[data-testid="stSidebar"] .stRadio label[data-checked="true"] {
-  background: var(--accent) !important;
-  border-color: var(--accent) !important;
+  gap: 10px;
 }
 
-/* Profile cards */
+[data-testid="stSidebar"] .stRadio label {
+  background: var(--glass-bg) !important;
+  border: 1px solid var(--glass-border) !important;
+  border-radius: 12px !important;
+  padding: 14px 18px !important;
+  transition: all 0.3s ease !important;
+  backdrop-filter: blur(10px) !important;
+}
+
+[data-testid="stSidebar"] .stRadio label:hover {
+  border-color: var(--accent-coral) !important;
+  background: rgba(255, 142, 83, 0.1) !important;
+  transform: translateX(4px) !important;
+}
+
+[data-testid="stSidebar"] .stRadio label[data-checked="true"] {
+  background: linear-gradient(135deg, var(--accent-rose), var(--accent-coral)) !important;
+  border-color: transparent !important;
+  box-shadow: 0 8px 24px rgba(255, 107, 107, 0.3) !important;
+}
+
+/* Profile cards - Glassmorphic with glow */
 .profile-card {
-  background: var(--card);
-  border-radius: 16px;
-  padding: 24px;
+  position: relative;
+  background: var(--glass-bg);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border-radius: 20px;
+  padding: 28px;
   margin-bottom: 32px;
-  box-shadow: 0 8px 32px var(--shadow);
-  border: 1px solid var(--border);
-  transition: all 0.3s ease;
+  border: 1px solid var(--glass-border);
+  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  overflow: hidden;
 }
+
+/* Gradient border effect on hover */
+.profile-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  border-radius: 20px;
+  padding: 2px;
+  background: linear-gradient(135deg, var(--accent-rose), var(--accent-coral), var(--accent-violet));
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  opacity: 0;
+  transition: opacity 0.4s ease;
+  pointer-events: none;
+}
+
+.profile-card:hover::before {
+  opacity: 1;
+}
+
 .profile-card:hover {
-  transform: translateY(-4px);
-  box-shadow: 0 12px 40px rgba(220, 38, 38, 0.25);
-  border-color: var(--accent);
+  transform: translateY(-8px);
+  box-shadow: 0 20px 60px rgba(255, 107, 107, 0.2);
 }
+
+/* Profile image with radial glow */
 .profile-card img {
-  border-radius: 12px;
+  border-radius: 16px;
   width: 100%;
   height: 400px;
   object-fit: cover;
   display: block;
   margin-bottom: 20px;
-  box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+  position: relative;
+  box-shadow: 0 0 60px rgba(255, 107, 107, 0.3), 0 0 100px rgba(139, 92, 246, 0.2);
 }
+
 .profile-card .name {
   margin: 12px 0;
-  color: var(--text);
-  font-family: 'Playfair Display', serif;
-  font-size: 28px;
+  color: var(--text-primary);
+  font-family: 'Plus Jakarta Sans', 'Inter', sans-serif;
+  font-size: 32px;
   font-weight: 700;
-  letter-spacing: 0.5px;
+  letter-spacing: -0.02em;
 }
+
 .profile-card .stats {
-  color: var(--text-secondary);
+  color: var(--text-muted);
   margin-bottom: 16px;
   font-size: 15px;
-  line-height: 1.7;
+  line-height: 1.8;
 }
+
 .profile-card .meta {
-  color: var(--text-secondary);
+  color: var(--text-muted);
   font-size: 14px;
 }
 
-/* Buttons */
+/* Buttons with pulse animation */
 .btn {
   display: inline-block;
-  padding: 12px 24px;
-  border-radius: 8px;
+  padding: 14px 28px;
+  border-radius: 12px;
   text-decoration: none;
   margin-right: 12px;
   font-weight: 600;
   font-size: 15px;
-  transition: all 0.2s ease;
-  letter-spacing: 0.5px;
+  transition: all 0.3s ease;
+  letter-spacing: 0.3px;
+  position: relative;
+  overflow: hidden;
 }
+
 .btn-link {
   background: transparent;
-  color: var(--accent);
-  border: 2px solid var(--accent);
+  color: var(--accent-coral);
+  border: 2px solid var(--accent-coral);
 }
+
 .btn-link:hover {
-  background: var(--accent);
+  background: linear-gradient(135deg, var(--accent-rose), var(--accent-coral));
   color: white;
-  box-shadow: 0 4px 20px var(--shadow);
+  border-color: transparent;
+  box-shadow: 0 8px 24px rgba(255, 107, 107, 0.4);
+  transform: translateY(-2px);
 }
+
 .btn-wa {
   background: #25D366;
   color: white;
   border: none;
 }
+
 .btn-wa:hover {
   background: #1da851;
-  box-shadow: 0 4px 20px rgba(37, 211, 102, 0.3);
+  box-shadow: 0 8px 24px rgba(37, 211, 102, 0.4);
+  transform: translateY(-2px);
 }
 
-/* Streamlit buttons */
+/* Streamlit buttons - Gradient with pulse */
 .stButton > button {
-  background: var(--accent) !important;
+  background: linear-gradient(135deg, var(--accent-rose), var(--accent-coral)) !important;
   color: white !important;
   border: none !important;
-  border-radius: 10px !important;
+  border-radius: 12px !important;
   font-weight: 600 !important;
   font-size: 16px !important;
-  padding: 0.75rem 1.5rem !important;
-  transition: all 0.2s ease !important;
-  letter-spacing: 0.5px !important;
-}
-.stButton > button:hover {
-  background: var(--accent-hover) !important;
-  box-shadow: 0 6px 24px var(--shadow) !important;
-  transform: translateY(-2px) !important;
-}
-.stButton > button:active {
-  transform: translateY(0) !important;
+  padding: 0.85rem 1.75rem !important;
+  transition: all 0.3s ease !important;
+  letter-spacing: 0.3px !important;
+  box-shadow: 0 8px 24px rgba(255, 107, 107, 0.3) !important;
+  position: relative !important;
+  overflow: hidden !important;
 }
 
-/* Form inputs */
+/* Pulse animation */
+@keyframes pulse {
+  0%, 100% { box-shadow: 0 8px 24px rgba(255, 107, 107, 0.3); }
+  50% { box-shadow: 0 8px 32px rgba(255, 107, 107, 0.5); }
+}
+
+.stButton > button:hover {
+  background: linear-gradient(135deg, var(--accent-coral), var(--accent-violet)) !important;
+  box-shadow: 0 12px 36px rgba(255, 107, 107, 0.5) !important;
+  transform: translateY(-3px) !important;
+  animation: pulse 2s ease-in-out infinite !important;
+}
+
+.stButton > button:active {
+  transform: translateY(-1px) !important;
+}
+
+/* Form inputs - Glassmorphic */
 .stTextInput > div > div > input,
 .stTextArea > div > div > textarea,
 .stSelectbox > div > div {
-  border-radius: 10px !important;
-  border: 2px solid var(--border) !important;
-  background: var(--bg-secondary) !important;
-  color: var(--text) !important;
+  border-radius: 12px !important;
+  border: 1px solid var(--glass-border) !important;
+  background: var(--glass-bg) !important;
+  backdrop-filter: blur(10px) !important;
+  color: var(--text-primary) !important;
   font-size: 16px !important;
-  padding: 12px 16px !important;
+  padding: 14px 18px !important;
+  transition: all 0.3s ease !important;
 }
+
 .stTextInput > div > div > input:focus,
 .stTextArea > div > div > textarea:focus {
-  border-color: var(--accent) !important;
-  box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.15) !important;
+  border-color: var(--accent-coral) !important;
+  box-shadow: 0 0 0 3px rgba(255, 142, 83, 0.2) !important;
+  background: rgba(255, 255, 255, 0.08) !important;
 }
+
 .stTextInput > div > div > input::placeholder,
 .stTextArea > div > div > textarea::placeholder {
-  color: var(--text-secondary) !important;
+  color: var(--text-muted) !important;
 }
 
 /* Labels */
 .stTextInput label,
 .stTextArea label,
 .stSelectbox label {
-  color: var(--text) !important;
+  color: var(--text-primary) !important;
   font-size: 15px !important;
   font-weight: 500 !important;
   margin-bottom: 8px !important;
 }
 
-/* Selectbox */
+/* Selectbox - Glassmorphic */
 .stSelectbox > div > div {
-  background: var(--bg-secondary) !important;
-}
-.stSelectbox [data-baseweb="select"] > div {
-  background: var(--bg-secondary) !important;
-  border-color: var(--border) !important;
+  background: var(--glass-bg) !important;
+  backdrop-filter: blur(10px) !important;
 }
 
-/* Headings */
-h1, h2, h3, .stHeader {
-  font-family: 'Playfair Display', serif !important;
-  font-weight: 700 !important;
-  color: var(--accent) !important;
-  letter-spacing: 0.5px;
+.stSelectbox [data-baseweb="select"] > div {
+  background: var(--glass-bg) !important;
+  backdrop-filter: blur(10px) !important;
+  border-color: var(--glass-border) !important;
 }
+
+/* Headings with gradient */
+h1, h2, h3, .stHeader {
+  font-family: 'Plus Jakarta Sans', 'Inter', sans-serif !important;
+  font-weight: 700 !important;
+  letter-spacing: -0.02em !important;
+  background: linear-gradient(135deg, var(--text-primary) 0%, var(--accent-coral) 100%) !important;
+  -webkit-background-clip: text !important;
+  -webkit-text-fill-color: transparent !important;
+  background-clip: text !important;
+}
+
 h1 {
-  font-size: 48px !important;
+  font-size: 3.5rem !important;
   margin-bottom: 16px !important;
 }
+
 h2 {
-  font-size: 36px !important;
+  font-size: 2.5rem !important;
   margin-bottom: 12px !important;
 }
+
 h3 {
-  font-size: 28px !important;
+  font-size: 1.8rem !important;
   margin-bottom: 10px !important;
 }
 
@@ -261,65 +406,76 @@ h3 {
 p, .stMarkdown p {
   font-size: 16px;
   line-height: 1.7;
-  color: var(--text-secondary);
+  color: var(--text-muted);
 }
 
 /* Links */
 a {
-  color: var(--accent);
+  color: var(--accent-coral);
   text-decoration: none;
-  transition: color 0.2s ease;
+  transition: all 0.2s ease;
 }
+
 a:hover {
-  color: var(--accent-hover);
+  color: var(--accent-rose);
   text-decoration: underline;
 }
 
-/* Tabs */
+/* Tabs - Glassmorphic */
 .stTabs [data-baseweb="tab-list"] {
-  gap: 8px;
-  background: var(--panel);
-  padding: 10px;
-  border-radius: 12px;
-  border: 1px solid var(--border);
+  gap: 10px;
+  background: var(--glass-bg);
+  backdrop-filter: blur(20px);
+  padding: 12px;
+  border-radius: 16px;
+  border: 1px solid var(--glass-border);
 }
+
 .stTabs [data-baseweb="tab"] {
   background: transparent !important;
-  color: var(--text-secondary) !important;
-  border-radius: 8px !important;
-  padding: 12px 24px !important;
+  color: var(--text-muted) !important;
+  border-radius: 10px !important;
+  padding: 14px 28px !important;
   font-size: 15px !important;
   font-weight: 500 !important;
-  transition: all 0.2s ease !important;
+  transition: all 0.3s ease !important;
 }
+
 .stTabs [data-baseweb="tab"]:hover {
-  color: var(--text) !important;
-  background: rgba(220, 38, 38, 0.1) !important;
+  color: var(--text-primary) !important;
+  background: rgba(255, 142, 83, 0.1) !important;
 }
+
 .stTabs [aria-selected="true"] {
-  background: var(--accent) !important;
+  background: linear-gradient(135deg, var(--accent-rose), var(--accent-coral)) !important;
   color: white !important;
-  box-shadow: 0 4px 16px var(--shadow) !important;
+  box-shadow: 0 8px 24px rgba(255, 107, 107, 0.3) !important;
 }
 
-/* Tables / DataFrames */
+/* Tables / DataFrames - Glassmorphic */
 .stDataFrame {
-  border: 1px solid var(--border) !important;
-  border-radius: 12px !important;
+  border: 1px solid var(--glass-border) !important;
+  border-radius: 16px !important;
   overflow: hidden;
-}
-.stDataFrame [data-testid="stDataFrameResizable"] {
-  background: var(--card) !important;
+  backdrop-filter: blur(20px) !important;
 }
 
-/* Info/Warning/Success/Error boxes */
-.stAlert {
-  border-radius: 12px !important;
-  border: none !important;
-  font-size: 15px !important;
+.stDataFrame [data-testid="stDataFrameResizable"] {
+  background: var(--glass-bg) !important;
+  backdrop-filter: blur(20px) !important;
 }
+
+/* Alert boxes - Glassmorphic */
+.stAlert {
+  border-radius: 14px !important;
+  border: 1px solid var(--glass-border) !important;
+  font-size: 15px !important;
+  backdrop-filter: blur(20px) !important;
+}
+
 .stAlert [data-baseweb="notification"] {
-  background: var(--panel) !important;
+  background: var(--glass-bg) !important;
+  backdrop-filter: blur(20px) !important;
 }
 
 /* Success message */
@@ -330,8 +486,8 @@ a:hover {
 
 /* Error message */
 .stError {
-  background: rgba(220, 38, 38, 0.1) !important;
-  border-left: 4px solid var(--accent) !important;
+  background: rgba(255, 107, 107, 0.1) !important;
+  border-left: 4px solid var(--accent-rose) !important;
 }
 
 /* Warning message */
@@ -342,33 +498,36 @@ a:hover {
 
 /* Info message */
 .stInfo {
-  background: rgba(59, 130, 246, 0.1) !important;
-  border-left: 4px solid #3b82f6 !important;
+  background: rgba(139, 92, 246, 0.1) !important;
+  border-left: 4px solid var(--accent-violet) !important;
 }
 
-/* Forms */
+/* Forms - Glassmorphic */
 [data-testid="stForm"] {
-  background: var(--panel) !important;
-  border: 1px solid var(--border) !important;
-  border-radius: 16px !important;
-  padding: 24px !important;
+  background: var(--glass-bg) !important;
+  backdrop-filter: blur(20px) !important;
+  border: 1px solid var(--glass-border) !important;
+  border-radius: 20px !important;
+  padding: 28px !important;
 }
 
-/* Expander */
+/* Expander - Glassmorphic */
 .streamlit-expanderHeader {
-  background: var(--panel) !important;
-  border-radius: 10px !important;
-  color: var(--text) !important;
+  background: var(--glass-bg) !important;
+  backdrop-filter: blur(20px) !important;
+  border-radius: 12px !important;
+  color: var(--text-primary) !important;
   font-weight: 500 !important;
+  border: 1px solid var(--glass-border) !important;
 }
 
 /* Footer */
 .footer {
   text-align: center;
-  color: var(--text-secondary);
+  color: var(--text-muted);
   padding: 40px 0;
   font-size: 14px;
-  border-top: 1px solid var(--border);
+  border-top: 1px solid var(--glass-border);
   margin-top: 60px;
   letter-spacing: 1px;
 }
@@ -376,45 +535,74 @@ a:hover {
 /* Dividers */
 hr {
   border: none;
-  border-top: 1px solid var(--border);
+  border-top: 1px solid var(--glass-border);
   margin: 32px 0;
 }
 
-/* Login page specific styles */
+/* Login page - Enhanced glassmorphic card */
 [data-testid="stVerticalBlock"] > div:has(> .stTabs) {
-  background: var(--card);
-  padding: 32px;
-  border-radius: 20px;
-  border: 1px solid var(--border);
-  box-shadow: 0 12px 48px rgba(220, 38, 38, 0.15);
+  background: var(--glass-bg);
+  backdrop-filter: blur(30px);
+  -webkit-backdrop-filter: blur(30px);
+  padding: 40px;
+  border-radius: 24px;
+  border: 1px solid var(--glass-border);
+  box-shadow: 0 20px 60px rgba(255, 107, 107, 0.15), 0 0 100px rgba(139, 92, 246, 0.1);
+  position: relative;
+  overflow: hidden;
 }
 
-/* Scrollbar styling */
-::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+/* Glow behind login card */
+[data-testid="stVerticalBlock"] > div:has(> .stTabs)::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 120%;
+  height: 120%;
+  background: radial-gradient(circle, rgba(255, 107, 107, 0.2), transparent 70%);
+  filter: blur(60px);
+  z-index: -1;
+  pointer-events: none;
 }
+
+/* Scrollbar styling - Glassmorphic */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
 ::-webkit-scrollbar-track {
   background: var(--bg);
 }
+
 ::-webkit-scrollbar-thumb {
-  background: var(--accent-dark);
-  border-radius: 4px;
+  background: linear-gradient(135deg, var(--accent-rose), var(--accent-coral));
+  border-radius: 6px;
+  border: 2px solid var(--bg);
 }
+
 ::-webkit-scrollbar-thumb:hover {
-  background: var(--accent);
+  background: linear-gradient(135deg, var(--accent-coral), var(--accent-violet));
 }
 
 /* Responsive tweaks */
 @media (max-width: 1100px) {
   .profile-card img { height: 350px; }
-  h1 { font-size: 40px !important; }
-  .app-container .brand h1 { font-size: 56px; }
+  h1 { font-size: 3rem !important; }
+  .app-container .brand h1 { font-size: 3.5rem; }
 }
+
 @media (max-width: 700px) {
   .profile-card img { height: 280px; }
-  .app-container .brand h1 { font-size: 42px; }
-  h1 { font-size: 32px !important; }
-  h2 { font-size: 28px !important; }
-  h3 { font-size: 22px !important; }
+  .app-container .brand h1 { font-size: 2.5rem; }
+  h1 { font-size: 2.5rem !important; }
+  h2 { font-size: 2rem !important; }
+  h3 { font-size: 1.5rem !important; }
+  .stApp::before,
+  .stApp::after {
+    width: 300px;
+    height: 300px;
+  }
 }
