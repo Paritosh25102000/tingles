@@ -30,6 +30,13 @@ gspread_client = None
 gspread_sh = None
 gspread_ws = None
 credentials_ws = None  # For credentials sheet
+suggestions_ws = None  # For suggestions sheet
+
+# Founder email for God Mode access (configure in secrets.toml)
+try:
+    FOUNDER_EMAIL = st.secrets.get("founder_email", "founder@tingles.com")
+except Exception:
+    FOUNDER_EMAIL = "founder@tingles.com"
 
 try:
     conn = st.connection("gsheets", type="gsheets")
@@ -38,7 +45,7 @@ except Exception:
 
 def init_gspread_from_toml():
     """Initialize gspread client from secrets (st.secrets on Cloud, or .streamlit/secrets.toml locally)."""
-    global gspread_client, gspread_sh, gspread_ws, credentials_ws
+    global gspread_client, gspread_sh, gspread_ws, credentials_ws, suggestions_ws
 
     # Return early if already initialized
     if gspread_ws is not None:
@@ -127,14 +134,28 @@ def init_gspread_from_toml():
             # Try to create it
             try:
                 credentials_ws = gspread_sh.add_worksheet(title="credentials", rows=100, cols=3)
-                credentials_ws.append_row(["username", "password", "role"])
+                credentials_ws.append_row(["email", "password", "role"])
             except Exception as e:
                 return False, f"credentials sheet not found and could not create. Available sheets: {all_sheets}. Error: {e}"
+
+    # Initialize Suggestions sheet
+    try:
+        suggestions_ws = gspread_sh.worksheet("Suggestions")
+    except Exception:
+        try:
+            suggestions_ws = gspread_sh.worksheet("suggestions")
+        except Exception:
+            try:
+                suggestions_ws = gspread_sh.add_worksheet(title="Suggestions", rows=1000, cols=5)
+                suggestions_ws.append_row(["Suggested_To_Email", "Profile_Of_Email", "Status"])
+            except Exception as e:
+                # Non-fatal: suggestions sheet is optional for backward compat
+                suggestions_ws = None
 
     return True, "ok"
 
 def load_credentials():
-    """Load username/password/role from credentials sheet. Returns (df, error_msg) tuple."""
+    """Load email/password/role from credentials sheet. Returns (df, error_msg) tuple."""
     # Use gspread (works on both local and Streamlit Cloud)
     ok, why = init_gspread_from_toml()
     if not ok:
@@ -146,9 +167,55 @@ def load_credentials():
     try:
         records = credentials_ws.get_all_records()
         df = pd.DataFrame(records)
+        # Normalize column names - support both 'email' and 'username' columns
+        col_lower = {c.lower().strip(): c for c in df.columns}
+        if 'email' in col_lower:
+            df = df.rename(columns={col_lower['email']: 'email'})
+        elif 'username' in col_lower:
+            # Treat username as email for backwards compatibility
+            df = df.rename(columns={col_lower['username']: 'email'})
+        if 'password' in col_lower:
+            df = df.rename(columns={col_lower['password']: 'password'})
+        if 'role' in col_lower:
+            df = df.rename(columns={col_lower['role']: 'role'})
         return df, None
     except Exception as e:
         return None, f"Failed to read credentials sheet: {e}"
+
+
+def add_credential(email, password, role="user"):
+    """Add a new user to the credentials sheet. Returns True on success."""
+    ok, why = init_gspread_from_toml()
+    if not ok or credentials_ws is None:
+        return False, f"Could not initialize credentials: {why}"
+
+    try:
+        # Check if email already exists
+        creds_df, err = load_credentials()
+        if creds_df is not None and 'email' in creds_df.columns:
+            if email.lower().strip() in creds_df['email'].fillna('').astype(str).str.lower().str.strip().values:
+                return False, "Email already registered. Please sign in."
+
+        # Get header to determine column order
+        header = credentials_ws.row_values(1)
+        header_lower = [h.lower().strip() for h in header]
+
+        # Build row values in correct order
+        row_values = []
+        for h in header_lower:
+            if h in ('email', 'username'):
+                row_values.append(email)
+            elif h == 'password':
+                row_values.append(password)
+            elif h == 'role':
+                row_values.append(role)
+            else:
+                row_values.append('')
+
+        credentials_ws.append_row(row_values)
+        return True, None
+    except Exception as e:
+        return False, f"Failed to add credential: {e}"
 
 # Sheet helpers supporting both conn and gspread fallback
 def load_sheet():
@@ -368,6 +435,176 @@ def resolve_image_url(url: str) -> str:
             pass
     return s
 
+
+# ============ SUGGESTIONS SHEET FUNCTIONS ============
+def load_suggestions():
+    """Load all suggestions from the Suggestions sheet. Returns DataFrame or None."""
+    ok, why = init_gspread_from_toml()
+    if not ok or suggestions_ws is None:
+        return None
+    try:
+        records = suggestions_ws.get_all_records()
+        return pd.DataFrame(records)
+    except Exception as e:
+        return None
+
+
+def get_suggestions_for_user(user_email):
+    """Get all profiles suggested to a specific user. Returns DataFrame of profile data with suggestion status."""
+    suggestions_df = load_suggestions()
+    if suggestions_df is None or suggestions_df.empty:
+        return pd.DataFrame()
+
+    # Filter by Suggested_To_Email (case-insensitive)
+    user_email_lower = str(user_email).lower().strip()
+    user_suggestions = suggestions_df[
+        suggestions_df['Suggested_To_Email'].fillna('').astype(str).str.lower().str.strip() == user_email_lower
+    ]
+
+    if user_suggestions.empty:
+        return pd.DataFrame()
+
+    # Get profile data for each Profile_Of_Email
+    profiles_df = load_sheet()
+    if profiles_df is None or profiles_df.empty:
+        return pd.DataFrame()
+
+    # Ensure Email column exists
+    if 'Email' not in profiles_df.columns:
+        return pd.DataFrame()
+
+    # Create lowercase email column for matching
+    profiles_df['_email_lower'] = profiles_df['Email'].fillna('').astype(str).str.lower().str.strip()
+
+    # Get suggested profile emails
+    suggested_emails = [str(e).lower().strip() for e in user_suggestions['Profile_Of_Email'].tolist()]
+
+    # Filter profiles to only those suggested
+    curated_profiles = profiles_df[profiles_df['_email_lower'].isin(suggested_emails)].copy()
+
+    # Merge suggestion status
+    user_suggestions['_profile_lower'] = user_suggestions['Profile_Of_Email'].fillna('').astype(str).str.lower().str.strip()
+    curated_profiles = curated_profiles.merge(
+        user_suggestions[['_profile_lower', 'Status']].rename(columns={'Status': 'SuggestionStatus'}),
+        left_on='_email_lower',
+        right_on='_profile_lower',
+        how='left'
+    )
+
+    # Clean up temp columns
+    curated_profiles = curated_profiles.drop(columns=['_email_lower', '_profile_lower'], errors='ignore')
+
+    return curated_profiles
+
+
+def add_suggestion(suggested_to_email, profile_of_email, status="Pending"):
+    """Add a new suggestion row. Returns True on success."""
+    ok, why = init_gspread_from_toml()
+    if not ok or suggestions_ws is None:
+        return False
+    try:
+        suggestions_ws.append_row([suggested_to_email, profile_of_email, status])
+        return True
+    except Exception as e:
+        st.error(f"Failed to add suggestion: {e}")
+        return False
+
+
+def update_suggestion_status(suggested_to_email, profile_of_email, new_status):
+    """Update the status of a specific suggestion. Returns True on success."""
+    ok, why = init_gspread_from_toml()
+    if not ok or suggestions_ws is None:
+        return False
+    try:
+        records = suggestions_ws.get_all_records()
+        for i, rec in enumerate(records, start=2):  # Start at row 2 (after header)
+            if (str(rec.get('Suggested_To_Email', '')).lower().strip() == str(suggested_to_email).lower().strip() and
+                str(rec.get('Profile_Of_Email', '')).lower().strip() == str(profile_of_email).lower().strip()):
+                # Update Status column (column 3)
+                suggestions_ws.update_cell(i, 3, new_status)
+                return True
+        return False
+    except Exception as e:
+        st.error(f"Failed to update suggestion: {e}")
+        return False
+
+
+def suggestion_exists(suggested_to_email, profile_of_email):
+    """Check if a suggestion already exists."""
+    suggestions_df = load_suggestions()
+    if suggestions_df is None or suggestions_df.empty:
+        return False
+
+    existing = suggestions_df[
+        (suggestions_df['Suggested_To_Email'].fillna('').astype(str).str.lower().str.strip() == str(suggested_to_email).lower().strip()) &
+        (suggestions_df['Profile_Of_Email'].fillna('').astype(str).str.lower().str.strip() == str(profile_of_email).lower().strip())
+    ]
+    return not existing.empty
+
+
+def get_profile_by_email(email):
+    """Get a single profile by email. Returns dict or None."""
+    profiles_df = load_sheet()
+    if profiles_df is None or profiles_df.empty:
+        return None
+
+    # Find email column - check for common variations
+    email_col = None
+    email_aliases = ['email', 'email_address', 'emailaddress', 'e-mail', 'user_email', 'useremail']
+    for col in profiles_df.columns:
+        if col.lower().strip() in email_aliases or 'email' in col.lower():
+            email_col = col
+            break
+
+    if email_col is None:
+        return None
+
+    email_lower = str(email).lower().strip()
+    profiles_df['_email_lower'] = profiles_df[email_col].fillna('').astype(str).str.lower().str.strip()
+    match = profiles_df[profiles_df['_email_lower'] == email_lower]
+
+    if match.empty:
+        return None
+    return match.iloc[0].to_dict()
+
+
+def update_profile_by_email(email, updates: dict):
+    """Update specific fields for a profile identified by email. Returns True on success."""
+    ok, why = init_gspread_from_toml()
+    if not ok:
+        return False
+    try:
+        header = gspread_ws.row_values(1)
+        email_col = None
+        for i, h in enumerate(header):
+            if h.lower().strip() == 'email':
+                email_col = i + 1
+                break
+
+        if not email_col:
+            return False
+
+        # Find row by email
+        col_vals = gspread_ws.col_values(email_col)
+        row_number = None
+        for r_idx, v in enumerate(col_vals, start=1):
+            if str(v).strip().lower() == str(email).strip().lower():
+                row_number = r_idx
+                break
+
+        if not row_number:
+            return False
+
+        # Update cells
+        for col_idx, col_name in enumerate(header, start=1):
+            if col_name in updates:
+                gspread_ws.update_cell(row_number, col_idx, updates[col_name])
+        return True
+    except Exception as e:
+        st.error(f"Profile update failed: {e}")
+        return False
+
+
 # Small connection checker UI (hidden from clients)
 if False:  # Disabled for client view
     with st.expander("Connection / Sheet check", expanded=True):
@@ -384,190 +621,142 @@ if False:  # Disabled for client view
 # Initialize login state
 if "logged_in" not in st.session_state:
     st.session_state.logged_in = False
-    st.session_state.username = None
+    st.session_state.user_email = None
     st.session_state.role = None
 
-def authenticate_user(username, password):
-    """Verify username/password against credentials sheet. Returns (success, role, error_msg) tuple."""
-    creds_df, load_error = load_credentials()
+
+def authenticate_user(email, password):
+    """Verify email and password against credentials sheet. Returns (success, role, error_msg) tuple."""
+    creds_df, err = load_credentials()
     if creds_df is None:
-        return False, None, f"Could not load credentials: {load_error}"
+        return False, None, f"Could not load credentials: {err}"
     if creds_df.empty:
-        return False, None, "Credentials sheet is empty. Add users to the 'credentials' sheet."
+        return False, None, "No users registered. Please sign up first."
 
-    # Normalize column names (handle common variants)
-    creds_df.columns = creds_df.columns.str.lower().str.strip()
+    # Normalize email comparison
+    email_lower = str(email).strip().lower()
 
-    # Find username/password/role columns
-    username_col = None
-    password_col = None
-    role_col = None
+    # Check if email column exists
+    if 'email' not in creds_df.columns:
+        return False, None, "Credentials sheet missing 'email' column. Please add it to your Google Sheet."
 
-    for col in creds_df.columns:
-        if "username" in col or "user" in col:
-            username_col = col
-        if "password" in col or "pass" in col:
-            password_col = col
-        if "role" in col:
-            role_col = col
+    # Create lowercase email column for matching
+    creds_df['_email_lower'] = creds_df['email'].fillna('').astype(str).str.lower().str.strip()
 
-    if not username_col or not password_col or not role_col:
-        return False, None, f"Credentials sheet missing required columns. Found: {list(creds_df.columns)}"
+    # Find user by email
+    user_row = creds_df[creds_df['_email_lower'] == email_lower]
 
-    # Find matching user
-    for idx, row in creds_df.iterrows():
-        if str(row.get(username_col, "")).strip() == str(username).strip():
-            if str(row.get(password_col, "")).strip() == str(password).strip():
-                role = str(row.get(role_col, "")).strip().lower()
-                return True, role, None
+    if user_row.empty:
+        return False, None, "Email not found. Please sign up first."
 
-    return False, None, "Invalid username or password."
+    # Check password
+    stored_password = str(user_row.iloc[0].get('password', '')).strip()
+    if stored_password != password:
+        return False, None, "Incorrect password. Please try again."
+
+    # Get role (default to 'user' if not specified)
+    role = str(user_row.iloc[0].get('role', 'user')).strip().lower()
+    if not role or role == 'nan':
+        role = 'user'
+
+    # Check if founder
+    if email_lower == FOUNDER_EMAIL.lower().strip():
+        role = 'founder'
+
+    return True, role, None
+
 
 def logout():
     """Clear login session."""
     st.session_state.logged_in = False
-    st.session_state.username = None
+    st.session_state.user_email = None
     st.session_state.role = None
 
-def username_exists(username):
-    """Check if username is already taken."""
-    creds_df, _ = load_credentials()
-    if creds_df is None or creds_df.empty:
-        return False
-    creds_df.columns = creds_df.columns.str.lower().str.strip()
-    for col in creds_df.columns:
-        if "username" in col or "user" in col:
-            for idx, row in creds_df.iterrows():
-                if str(row.get(col, "")).strip().lower() == str(username).strip().lower():
-                    return True
-    return False
-
-def create_new_user(username, password, role="user"):
-    """Add new user to credentials sheet. Returns (success, message)."""
-    if username_exists(username):
-        return False, "Username already taken."
-    
-    ok, why = init_gspread_from_toml()
-    if not ok:
-        return False, f"Could not connect to sheet: {why}"
-    
-    if credentials_ws is None:
-        return False, "Could not create or access credentials sheet. Ensure service account has edit permissions."
-    
-    try:
-        # Get header to determine column order
-        header = credentials_ws.row_values(1)
-        if not header or header == []:
-            # Sheet exists but is empty; add headers
-            credentials_ws.append_row(["username", "password", "role"])
-            header = ["username", "password", "role"]
-        
-        username_col = None
-        password_col = None
-        role_col = None
-        
-        for i, col in enumerate(header):
-            col_lower = str(col).strip().lower()
-            if "username" in col_lower or "user" in col_lower:
-                username_col = i
-            if "password" in col_lower or "pass" in col_lower:
-                password_col = i
-            if "role" in col_lower:
-                role_col = i
-        
-        if username_col is None or password_col is None or role_col is None:
-            return False, "Credentials sheet missing required columns (username, password, role). Please set up the sheet manually."
-        
-        # Build row values matching header order
-        row_values = [""] * len(header)
-        row_values[username_col] = username
-        row_values[password_col] = password
-        row_values[role_col] = role
-        
-        credentials_ws.append_row(row_values)
-        return True, "Account created successfully! Please log in."
-    except Exception as e:
-        return False, f"Failed to create account: {str(e)}"
-
-# ============ LOGIN / SIGN-UP PAGE ============
-# Initialize signup mode state
-if "signup_mode" not in st.session_state:
-    st.session_state.signup_mode = False
-
+# ============ LOGIN / SIGNUP PAGE ============
 if not st.session_state.logged_in:
-    st.markdown("<div style='text-align: center; padding: 60px 20px;'>", unsafe_allow_html=True)
-    st.markdown("<h2 style='font-family: Playfair Display, serif; font-size: 48px; margin-bottom: 30px;'>Welcome to Tingles</h2>", unsafe_allow_html=True)
-    st.markdown("<p style='font-size: 18px; color: #98a2ab; margin-bottom: 50px;'>Boutique Matchmaking Platform</p>", unsafe_allow_html=True)
-    
+    st.markdown("<div style='text-align: center; padding: 40px 20px;'>", unsafe_allow_html=True)
+    st.markdown("<h2 style='font-family: Playfair Display, serif; font-size: 48px; margin-bottom: 20px;'>Welcome to Tingles</h2>", unsafe_allow_html=True)
+    st.markdown("<p style='font-size: 18px; color: #98a2ab; margin-bottom: 30px;'>Boutique Matchmaking Platform</p>", unsafe_allow_html=True)
+
     login_col1, login_col2, login_col3 = st.columns([1, 2, 1])
     with login_col2:
-        # Toggle between Login and Sign Up
-        tab1, tab2 = st.tabs(["Sign In", "Sign Up"])
-        
-        with tab1:
-            st.markdown("### Login to Your Account")
-            username = st.text_input("Username", placeholder="Enter your username", key="login_username")
-            password = st.text_input("Password", type="password", placeholder="Enter your password", key="login_password")
-            
+        auth_tab = st.tabs(["Sign In", "Sign Up"])
+
+        # ============ SIGN IN TAB ============
+        with auth_tab[0]:
+            st.markdown("<p style='color: #6b7280; font-size: 14px;'>Enter your credentials to sign in.</p>", unsafe_allow_html=True)
+            login_email = st.text_input("Email", placeholder="Enter your email", key="login_email")
+            login_password = st.text_input("Password", placeholder="Enter your password", type="password", key="login_password")
+
             if st.button("Sign In", use_container_width=True, key="signin_btn"):
-                if username and password:
-                    success, role, error_msg = authenticate_user(username, password)
+                if login_email and login_password:
+                    success, role, error_msg = authenticate_user(login_email, login_password)
                     if success:
                         st.session_state.logged_in = True
-                        st.session_state.username = username
+                        st.session_state.user_email = login_email
                         st.session_state.role = role
-                        st.success(f"Welcome, {username}!")
+                        # Get user's name for greeting
+                        profile = get_profile_by_email(login_email)
+                        name = profile.get('Name', login_email) if profile else login_email
+                        st.success(f"Welcome, {name}!")
                         st.rerun()
                     else:
                         st.error(error_msg)
                 else:
-                    st.warning("Please enter both username and password.")
-        
-        with tab2:
-            st.markdown("### Create a New Account")
-            signup_username = st.text_input("Choose a username", placeholder="Enter your desired username", key="signup_username")
-            signup_password = st.text_input("Choose a password", type="password", placeholder="Enter a password", key="signup_password")
-            signup_confirm = st.text_input("Confirm password", type="password", placeholder="Re-enter your password", key="signup_confirm")
-            
-            if st.button("Create Account", use_container_width=True, key="signup_btn"):
-                if not signup_username or not signup_password or not signup_confirm:
-                    st.warning("Please fill in all fields.")
-                elif signup_password != signup_confirm:
-                    st.error("Passwords do not match.")
+                    st.warning("Please enter both email and password.")
+
+        # ============ SIGN UP TAB ============
+        with auth_tab[1]:
+            st.markdown("<p style='color: #6b7280; font-size: 14px;'>Create a new account to join Tingles.</p>", unsafe_allow_html=True)
+            signup_email = st.text_input("Email", placeholder="Enter your email", key="signup_email")
+            signup_password = st.text_input("Password", placeholder="Create a password", type="password", key="signup_password")
+            signup_password_confirm = st.text_input("Confirm Password", placeholder="Confirm your password", type="password", key="signup_password_confirm")
+
+            if st.button("Sign Up", use_container_width=True, key="signup_btn"):
+                if not signup_email:
+                    st.warning("Please enter your email address.")
+                elif not signup_password:
+                    st.warning("Please enter a password.")
                 elif len(signup_password) < 6:
-                    st.error("Password must be at least 6 characters long.")
-                elif len(signup_username) < 3:
-                    st.error("Username must be at least 3 characters long.")
+                    st.warning("Password must be at least 6 characters.")
+                elif signup_password != signup_password_confirm:
+                    st.error("Passwords do not match.")
                 else:
-                    success, message = create_new_user(signup_username, signup_password, role="user")
+                    success, err = add_credential(signup_email, signup_password, "user")
                     if success:
-                        st.success(message)
-                        st.info("Redirecting to login page in 2 seconds...")
-                        import time
-                        time.sleep(2)
-                        st.rerun()
+                        st.success("Account created! You can now sign in.")
                     else:
-                        st.error(message)
-    
+                        st.error(err)
+
     st.markdown("</div>", unsafe_allow_html=True)
     st.stop()  # Stop execution here; don't show main app until logged in
 
 # ============ MAIN APP (logged in) ============
-# Top-right logout button
-logout_col1, logout_col2 = st.columns([8, 2])
-with logout_col2:
-    st.markdown(f"**{st.session_state.username}** ({st.session_state.role})")
-    if st.button("Logout", use_container_width=True):
-        logout()
-        st.rerun()
+# Get user profile for display
+user_profile = get_profile_by_email(st.session_state.user_email)
+user_display_name = user_profile.get('Name', st.session_state.user_email) if user_profile else st.session_state.user_email
 
 # Determine which view to show based on role
 is_founder = st.session_state.role == "founder"
 
-if is_founder:
-    view = "God Mode"  # Founder always sees God Mode (no choice)
-else:
-    view = "Gallery"  # Regular users always see Gallery
+# Sidebar navigation
+with st.sidebar:
+    # Show greeting with name (not email twice)
+    greeting_name = user_profile.get('Name', '').strip() if user_profile else ''
+    if not greeting_name:
+        # Use part before @ from email as fallback
+        greeting_name = st.session_state.user_email.split('@')[0]
+    st.markdown(f"### Hi, {greeting_name}!")
+
+    if is_founder:
+        view = st.radio("Navigate", ["God Mode", "All Profiles"], label_visibility="collapsed")
+    else:
+        view = st.radio("Navigate", ["Curated For You", "My Profile"], label_visibility="collapsed")
+
+    st.markdown("---")
+    if st.button("Logout", use_container_width=True):
+        logout()
+        st.rerun()
 
 # Admin authentication (God Mode)
 
@@ -584,20 +773,34 @@ else:
     alias_map = {
         "name": "Name",
         "full_name": "Name",
-        "photo_url": "ImageURL",
-        "imageurl": "ImageURL",
-        "image_url": "ImageURL",
+        "email": "Email",
+        "email_address": "Email",
+        "gender": "Gender",
+        "sex": "Gender",
+        "age": "Age",
+        "bio": "Bio",
+        "biography": "Bio",
+        "about": "Bio",
+        "photo_url": "PhotoURL",
+        "photourl": "PhotoURL",
+        "imageurl": "PhotoURL",
+        "image_url": "PhotoURL",
         "height": "Height",
+        "profession": "Profession",
+        "job": "Profession",
         "industry": "Industry",
-        "profession": "Industry",
-        "job": "Industry",
         "education": "Education",
+        "religion": "Religion",
+        "residency_status": "Residency_Status",
+        "residency": "Residency_Status",
+        "location": "Location",
+        "city": "Location",
         "linkedin_url": "LinkedIn",
         "linkedin": "LinkedIn",
+        "whatsapp": "WhatsApp",
+        "whatsapp_number": "WhatsApp",
+        "phone": "WhatsApp",
         "status": "Status",
-        "match_stage": "MatchStage",
-        "matchstage": "MatchStage",
-        "phone": "Phone",
         "id": "ID",
     }
     # Build rename mapping based on existing df columns
@@ -634,16 +837,261 @@ else:
     if rename_map:
         df = df.rename(columns=rename_map)
     # Ensure expected columns exist
-    expected_columns = ["Name", "ImageURL", "Height", "Industry", "Education", "LinkedIn", "Status", "MatchStage", "Phone"]
+    expected_columns = ["Email", "Name", "Gender", "Age", "Bio", "LinkedIn", "WhatsApp", "PhotoURL",
+                        "Profession", "Industry", "Education", "Religion", "Residency_Status",
+                        "Location", "Height", "Status"]
     for col in expected_columns:
         if col not in df.columns:
             df[col] = ""
     st.session_state.df = df
 
-    if view == "Gallery":
-        st.header("Gallery")
-        # Treat common 'available' synonyms from sheets as available
-        avail_set = {"available", "single", "open"}
+    # ============ HELPER: Render Profile Card ============
+    def render_profile_card(row, show_interest_button=False, card_index=0):
+        """Render a profile card with optional interest button."""
+        def _scalar(v):
+            if v is None:
+                return ""
+            if isinstance(v, pd.Series) or isinstance(v, list) or isinstance(v, tuple):
+                try:
+                    return str(v.iloc[0]) if hasattr(v, 'iloc') else str(v[0])
+                except Exception:
+                    return str(v)
+            return str(v)
+
+        st.markdown("<div class='profile-card'>", unsafe_allow_html=True)
+
+        # Image
+        img_raw = _scalar(row.get("PhotoURL", "") or row.get("ImageURL", ""))
+        img_url = resolve_image_url(img_raw) if img_raw else None
+        if img_url:
+            try:
+                st.image(img_url, width=300)
+            except Exception:
+                st.markdown("<div style='height:260px;background:#2a2a2a;border-radius:8px;display:flex;align-items:center;justify-content:center;color:#666'>Image unavailable</div>", unsafe_allow_html=True)
+        else:
+            st.markdown("<div style='height:260px;background:#2a2a2a;border-radius:8px;display:flex;align-items:center;justify-content:center;color:#666'>No image</div>", unsafe_allow_html=True)
+
+        # Name and age
+        name = _scalar(row.get('Name', ''))
+        age = _scalar(row.get('Age', ''))
+        name_display = f"{name}, {age}" if age else name
+        st.markdown(f"<h3 class='name'>{name_display}</h3>", unsafe_allow_html=True)
+
+        # Profession and Location
+        profession = _scalar(row.get('Profession', '')) or _scalar(row.get('Industry', ''))
+        location = _scalar(row.get('Location', ''))
+        if profession or location:
+            info_line = " | ".join(filter(None, [profession, location]))
+            st.markdown(f"<p class='stats' style='color:#dc2626;font-weight:500;'>{info_line}</p>", unsafe_allow_html=True)
+
+        # Details line
+        height = _scalar(row.get('Height', ''))
+        education = _scalar(row.get('Education', ''))
+        details = " | ".join(filter(None, [f"Height: {height}" if height else "", education]))
+        if details:
+            st.markdown(f"<p class='stats'>{details}</p>", unsafe_allow_html=True)
+
+        # Bio
+        bio = _scalar(row.get('Bio', ''))
+        if bio:
+            st.markdown(f"<p style='color:#a0a0a0; font-size:14px;'>{bio[:200]}{'...' if len(bio) > 200 else ''}</p>", unsafe_allow_html=True)
+
+        # LinkedIn button
+        linkedin = _scalar(row.get("LinkedIn", ""))
+        if linkedin:
+            st.markdown(f"<a class='btn btn-link' target='_blank' href='{linkedin}'>View LinkedIn</a>", unsafe_allow_html=True)
+
+        # Interest button
+        if show_interest_button:
+            profile_email = _scalar(row.get('Email', ''))
+            if st.button("I'm Interested", key=f"interest_{card_index}_{profile_email}"):
+                if update_suggestion_status(st.session_state.user_email, profile_email, "Liked"):
+                    st.success("Interest recorded! The matchmaker will be in touch.")
+                    st.rerun()
+                else:
+                    st.error("Could not record interest. Please try again.")
+
+        st.markdown("</div>", unsafe_allow_html=True)
+
+    # ============ VIEWS ============
+    if view == "Curated For You":
+        st.header("Curated For You")
+        st.markdown("<p style='color:#6b7280;'>Profiles handpicked by your matchmaker.</p>", unsafe_allow_html=True)
+
+        # Get suggestions for this user
+        user_email = st.session_state.user_email
+        curated_profiles = get_suggestions_for_user(user_email)
+
+        # Filter to only show Pending suggestions
+        if curated_profiles is not None and not curated_profiles.empty:
+            pending = curated_profiles[
+                curated_profiles['SuggestionStatus'].fillna('Pending').astype(str).str.lower() == 'pending'
+            ]
+        else:
+            pending = pd.DataFrame()
+
+        if pending.empty:
+            st.info("No new profiles curated for you yet. Check back soon!")
+        else:
+            cols = st.columns(3)
+            for i, (_, row) in enumerate(pending.iterrows()):
+                with cols[i % 3]:
+                    render_profile_card(row, show_interest_button=True, card_index=i)
+
+    elif view == "My Profile":
+        st.header("My Profile")
+
+        my_profile = get_profile_by_email(st.session_state.user_email)
+
+        if my_profile is None:
+            # Profile not found - show create profile form
+            st.info("Welcome! Please complete your profile to get started.")
+            st.markdown("<p style='color:#a0a0a0;'>Fill in your details below to create your profile.</p>", unsafe_allow_html=True)
+
+            with st.form("create_profile"):
+                cp_name = st.text_input("Full Name *", placeholder="Enter your full name")
+
+                col1, col2, col3 = st.columns(3)
+                with col1:
+                    cp_age = st.text_input("Age", placeholder="e.g., 28")
+                with col2:
+                    cp_height = st.text_input("Height", placeholder="e.g., 5'10\"")
+                with col3:
+                    cp_gender = st.selectbox("Gender", ["", "Male", "Female", "Other"])
+
+                col4, col5 = st.columns(2)
+                with col4:
+                    cp_profession = st.text_input("Profession", placeholder="e.g., Software Engineer")
+                with col5:
+                    cp_industry = st.text_input("Industry", placeholder="e.g., Technology")
+
+                col6, col7 = st.columns(2)
+                with col6:
+                    cp_education = st.text_input("Education", placeholder="e.g., MBA from IIM")
+                with col7:
+                    cp_religion = st.text_input("Religion", placeholder="e.g., Hindu")
+
+                col8, col9 = st.columns(2)
+                with col8:
+                    cp_residency = st.text_input("Residency Status", placeholder="e.g., Citizen, PR, Work Visa")
+                with col9:
+                    cp_location = st.text_input("Location", placeholder="e.g., Mumbai, India")
+
+                cp_linkedin = st.text_input("LinkedIn URL", placeholder="https://linkedin.com/in/yourprofile")
+                cp_photo = st.text_input("Photo URL", placeholder="Direct link to your photo (e.g., from ibb.co)")
+                cp_bio = st.text_area("Bio", placeholder="Tell us about yourself, your interests, and what you're looking for...", height=120)
+
+                if st.form_submit_button("Create Profile", use_container_width=True):
+                    if not cp_name:
+                        st.error("Please enter your full name.")
+                    else:
+                        # Generate ID
+                        try:
+                            existing_ids = pd.to_numeric(df["ID"], errors="coerce").dropna()
+                            next_id = int(existing_ids.max()) + 1 if len(existing_ids) > 0 else 1
+                        except Exception:
+                            next_id = len(df) + 1
+
+                        new_profile = {
+                            "ID": str(next_id),
+                            "Email": st.session_state.user_email,
+                            "Name": cp_name,
+                            "Gender": cp_gender,
+                            "Age": cp_age,
+                            "Height": cp_height,
+                            "Profession": cp_profession,
+                            "Industry": cp_industry,
+                            "Education": cp_education,
+                            "Religion": cp_religion,
+                            "Residency_Status": cp_residency,
+                            "Location": cp_location,
+                            "LinkedIn": cp_linkedin,
+                            "PhotoURL": cp_photo,
+                            "Bio": cp_bio,
+                            "Status": "Active"
+                        }
+
+                        if append_row(new_profile):
+                            st.success("Profile created successfully!")
+                            st.session_state.df = load_sheet()
+                            st.rerun()
+                        else:
+                            st.error("Failed to create profile. Please try again.")
+        else:
+            col1, col2 = st.columns([1, 2])
+            with col1:
+                img_url = resolve_image_url(my_profile.get('PhotoURL', '') or my_profile.get('ImageURL', ''))
+                if img_url:
+                    try:
+                        st.image(img_url, width=300)
+                    except Exception:
+                        st.markdown("<div style='height:300px;background:#2a2a2a;border-radius:12px;display:flex;align-items:center;justify-content:center;color:#666;'>No photo</div>", unsafe_allow_html=True)
+                else:
+                    st.markdown("<div style='height:300px;background:#2a2a2a;border-radius:12px;display:flex;align-items:center;justify-content:center;color:#666;'>No photo</div>", unsafe_allow_html=True)
+
+            with col2:
+                st.markdown(f"### {my_profile.get('Name', 'Unknown')}")
+                st.markdown(f"**Email:** {my_profile.get('Email', '')}")
+                st.markdown(f"**Age:** {my_profile.get('Age', 'N/A')}")
+                st.markdown(f"**Gender:** {my_profile.get('Gender', 'N/A')}")
+                st.markdown(f"**Height:** {my_profile.get('Height', 'N/A')}")
+                st.markdown(f"**Profession:** {my_profile.get('Profession', 'N/A')}")
+                st.markdown(f"**Industry:** {my_profile.get('Industry', 'N/A')}")
+                st.markdown(f"**Education:** {my_profile.get('Education', 'N/A')}")
+                st.markdown(f"**Religion:** {my_profile.get('Religion', 'N/A')}")
+                st.markdown(f"**Location:** {my_profile.get('Location', 'N/A')}")
+
+            st.markdown("---")
+            st.subheader("Edit Your Profile")
+            st.markdown("<p style='color:#a0a0a0;'>Update your profile information below.</p>", unsafe_allow_html=True)
+
+            with st.form("edit_profile"):
+                col1, col2, col3 = st.columns(3)
+                with col1:
+                    new_age = st.text_input("Age", value=my_profile.get('Age', '') or '')
+                with col2:
+                    new_height = st.text_input("Height", value=my_profile.get('Height', '') or '')
+                with col3:
+                    new_profession = st.text_input("Profession", value=my_profile.get('Profession', '') or '')
+
+                col4, col5 = st.columns(2)
+                with col4:
+                    new_industry = st.text_input("Industry", value=my_profile.get('Industry', '') or '')
+                with col5:
+                    new_education = st.text_input("Education", value=my_profile.get('Education', '') or '')
+
+                col6, col7 = st.columns(2)
+                with col6:
+                    new_religion = st.text_input("Religion", value=my_profile.get('Religion', '') or '')
+                with col7:
+                    new_location = st.text_input("Location", value=my_profile.get('Location', '') or '')
+
+                new_linkedin = st.text_input("LinkedIn URL", value=my_profile.get('LinkedIn', '') or '')
+                new_photo = st.text_input("Photo URL", value=my_profile.get('PhotoURL', '') or my_profile.get('ImageURL', '') or '')
+                new_bio = st.text_area("Bio", value=my_profile.get('Bio', '') or '', height=100)
+
+                if st.form_submit_button("Save Changes", use_container_width=True):
+                    if update_profile_by_email(st.session_state.user_email, {
+                        'Age': new_age,
+                        'Height': new_height,
+                        'Profession': new_profession,
+                        'Industry': new_industry,
+                        'Education': new_education,
+                        'Religion': new_religion,
+                        'Location': new_location,
+                        'LinkedIn': new_linkedin,
+                        'PhotoURL': new_photo,
+                        'Bio': new_bio
+                    }):
+                        st.success("Profile updated successfully!")
+                        st.rerun()
+                    else:
+                        st.error("Failed to update profile. Please try again.")
+
+    elif view == "All Profiles":
+        # Founder view: see all profiles
+        st.header("All Profiles")
+        avail_set = {"available", "single", "open", "active"}
         available = df[df["Status"].fillna("").astype(str).str.lower().isin(avail_set)]
         if available.empty:
             st.info("No available profiles at the moment.")
@@ -651,208 +1099,184 @@ else:
             cols = st.columns(3)
             for i, (_, row) in enumerate(available.iterrows()):
                 with cols[i % 3]:
-                    st.markdown(f"<div class='profile-card'>", unsafe_allow_html=True)
-                    def _scalar(v):
-                        import pandas as _pd
-                        if v is None:
-                            return ""
-                        if isinstance(v, _pd.Series) or isinstance(v, list) or isinstance(v, tuple):
-                            try:
-                                return str(v.iloc[0]) if hasattr(v, 'iloc') else str(v[0])
-                            except Exception:
-                                return str(v)
-                        return str(v)
-                    img_raw = _scalar(row.get("ImageURL",""))
-                    img_url = resolve_image_url(img_raw) if img_raw else None
-                    if img_url:
-                        try:
-                            st.image(img_url, width=300)
-                        except Exception as e:
-                            st.markdown(f"<div style='height:260px;background:#0f1724;border-radius:8px;display:flex;align-items:center;justify-content:center;color:var(--muted)'>Image unavailable<br/><small>{str(e)[:50]}</small></div>", unsafe_allow_html=True)
-                    else:
-                        st.markdown("<div style='height:260px;background:#0f1724;border-radius:8px;display:flex;align-items:center;justify-content:center;color:var(--muted)'>No image</div>", unsafe_allow_html=True)
-                    st.markdown(f"<h3 class='name'>{_scalar(row.get('Name',''))}</h3>", unsafe_allow_html=True)
-                    st.markdown(f"<p class='stats'>Height: {_scalar(row.get('Height','N/A'))} &nbsp;|&nbsp; Industry: {_scalar(row.get('Industry','N/A'))} &nbsp;|&nbsp; Education: {_scalar(row.get('Education','N/A'))}</p>", unsafe_allow_html=True)
-                    # LinkedIn button (opens in new tab)
-                    linkedin = row.get("LinkedIn", "")
-                    if linkedin:
-                        st.markdown(f"<a class='btn btn-link' target='_blank' href='{linkedin}'>View LinkedIn</a>", unsafe_allow_html=True)
-                    # If MatchStage == Date, show WhatsApp
-                    if str(row.get("MatchStage","")).lower() == "date":
-                        phone = row.get("Phone","")
-                        if phone:
-                            wa_link = f"https://wa.me/{quote_plus(str(phone))}"
-                            st.markdown(f"<a class='btn btn-wa' target='_blank' href='{wa_link}'>Chat on WhatsApp</a>", unsafe_allow_html=True)
-                    # Express Interest button
-                    key = f"express_{i}"
-                    if st.button("Express Interest", key=key):
-                        # Persist to Google Sheet using gspread (most reliable method)
-                        persist_ok = False
-
-                        # Always use gspread for writes - it's more reliable than st.connection
-                        identifiers = {"ID": row.get("ID"), "Name": row.get("Name")}
-                        row_number = find_sheet_row_number(identifiers)
-
-                        if row_number:
-                            try:
-                                persist_ok = update_row_by_number(row_number, {"Status": "Interested", "MatchStage": "Requested"})
-                            except Exception as e:
-                                st.error(f"Failed to update sheet: {e}")
-
-                        if not persist_ok:
-                            st.error("Could not update the Google Sheet. Please check service account permissions.")
-                        else:
-                            st.success("Interest recorded!")
-
-                        # Reload data from sheet to reflect changes
-                        st.session_state.df = load_sheet()
-                        st.rerun()
-                    st.markdown("</div>", unsafe_allow_html=True)
+                    render_profile_card(row, show_interest_button=False, card_index=i)
 
     elif view == "God Mode":
         st.header("God Mode — Founder Tools")
         if not is_founder:
             st.warning("Founder access required. Please log in with a founder account.")
         else:
-            st.success("Founder access granted")
-            # Show table of Interested profiles
-            interested = df[df["Status"].str.lower() == "interested"]
-            st.subheader("Interested Profiles")
-            st.dataframe(interested)
+            tab1, tab2, tab3, tab4 = st.tabs(["Matchmaker", "Pipeline", "Stage Updater", "Manage Profiles"])
 
-            # Select a profile to edit MatchStage
-            if not interested.empty:
-                sel_index = st.selectbox("Select profile to update", interested.index.tolist(), format_func=lambda idx: df.at[idx, "Name"])
-                current_stage = df.at[sel_index, "MatchStage"]
-                new_stage = st.selectbox("MatchStage", ["Requested","Date","Relationship","Engaged","Married"], index=(0 if current_stage not in ["Requested","Date","Relationship","Engaged","Married"] else ["Requested","Date","Relationship","Engaged","Married"].index(current_stage)))
-                if st.button("Save MatchStage"):
-                    if conn is not None:
-                        df.at[sel_index, "MatchStage"] = new_stage
-                        if write_sheet(df):
-                            st.success("MatchStage updated.")
-                            st.session_state.df = load_sheet()
-                        else:
-                            st.error("Failed to save MatchStage.")
+            # ============ MATCHMAKER TOOL ============
+            with tab1:
+                st.subheader("Matchmaker Tool")
+                st.markdown("<p style='color:#6b7280;'>Create a new suggestion by selecting a user and a candidate profile.</p>", unsafe_allow_html=True)
+
+                if df.empty or 'Email' not in df.columns:
+                    st.warning("No profiles with Email column found.")
+                else:
+                    all_emails = df['Email'].dropna().tolist()
+                    all_emails = [e for e in all_emails if str(e).strip()]
+
+                    if len(all_emails) < 2:
+                        st.warning("Need at least 2 profiles to create suggestions.")
                     else:
-                        row_number = int(sel_index) + 2
-                        ok = update_row_by_number(row_number, {"MatchStage": new_stage})
-                        if ok:
-                            st.success("MatchStage updated.")
-                            st.session_state.df = load_sheet()
-                        else:
-                            st.error("Failed to save MatchStage via gspread.")
+                        selected_user = st.selectbox(
+                            "Select User (receives suggestion)",
+                            all_emails,
+                            key="mm_user",
+                            format_func=lambda e: f"{df[df['Email']==e]['Name'].values[0] if len(df[df['Email']==e])>0 else e} ({e})"
+                        )
 
-                # Founder controls: clear interest or delete profile
-                col1, col2 = st.columns(2)
-                with col1:
-                    if st.button("Clear Interest"):
-                        # set status back to Available and clear MatchStage locally
-                        try:
-                            df.at[sel_index, "Status"] = "Available"
-                            df.at[sel_index, "MatchStage"] = ""
-                            st.session_state.df = df
-                        except Exception:
-                            pass
-                        # persist
-                        if conn is not None:
-                            if write_sheet(df):
-                                st.success("Interest cleared and persisted.")
-                                st.session_state.df = load_sheet()
+                        candidate_emails = [e for e in all_emails if e != selected_user]
+                        selected_candidate = st.selectbox(
+                            "Select Candidate (profile to suggest)",
+                            candidate_emails,
+                            key="mm_candidate",
+                            format_func=lambda e: f"{df[df['Email']==e]['Name'].values[0] if len(df[df['Email']==e])>0 else e} ({e})"
+                        )
+
+                        if st.button("Add Suggestion", key="add_suggestion_btn"):
+                            if suggestion_exists(selected_user, selected_candidate):
+                                st.warning("This suggestion already exists.")
                             else:
-                                st.warning("Cleared locally but failed to persist via st.connection.")
-                        else:
-                            identifiers = {"ID": df.at[sel_index, "ID"] if "ID" in df.columns else None, "Name": df.at[sel_index, "Name"]}
-                            row_number = find_sheet_row_number(identifiers)
-                            if row_number:
-                                if update_row_by_number(row_number, {"Status": "Available", "MatchStage": ""}):
-                                    st.success("Interest cleared.")
-                                    st.session_state.df = load_sheet()
+                                if add_suggestion(selected_user, selected_candidate, "Pending"):
+                                    st.success(f"Suggested {selected_candidate} to {selected_user}!")
                                 else:
-                                    st.warning("Cleared locally but failed to persist via gspread.")
-                            else:
-                                st.warning("Cleared locally but could not locate sheet row to persist change.")
-                with col2:
-                    if st.button("Delete Profile"):
-                        # remove profile from sheet and local df
-                        identifiers = {"ID": df.at[sel_index, "ID"] if "ID" in df.columns else None, "Name": df.at[sel_index, "Name"]}
-                        row_number = find_sheet_row_number(identifiers)
-                        if conn is not None:
-                            # remove from local df and overwrite sheet
+                                    st.error("Failed to add suggestion.")
+
+            # ============ PIPELINE TRACKER ============
+            with tab2:
+                st.subheader("Pipeline Tracker")
+                st.markdown("<p style='color:#6b7280;'>View all 'Liked' suggestions - users who expressed interest.</p>", unsafe_allow_html=True)
+
+                suggestions_df = load_suggestions()
+                if suggestions_df is None or suggestions_df.empty:
+                    st.info("No suggestions yet.")
+                else:
+                    liked = suggestions_df[suggestions_df['Status'].fillna('').astype(str).str.lower() == 'liked']
+
+                    if liked.empty:
+                        st.info("No 'Liked' suggestions yet. Users haven't expressed interest in any suggestions.")
+                    else:
+                        display_data = []
+                        for _, row in liked.iterrows():
+                            user_profile = get_profile_by_email(row['Suggested_To_Email'])
+                            candidate_profile = get_profile_by_email(row['Profile_Of_Email'])
+                            display_data.append({
+                                'User': user_profile.get('Name', row['Suggested_To_Email']) if user_profile else row['Suggested_To_Email'],
+                                'User Email': row['Suggested_To_Email'],
+                                'Interested In': candidate_profile.get('Name', row['Profile_Of_Email']) if candidate_profile else row['Profile_Of_Email'],
+                                'Candidate Email': row['Profile_Of_Email'],
+                                'Status': row['Status']
+                            })
+
+                        st.dataframe(pd.DataFrame(display_data))
+
+                        st.markdown("---")
+                        st.markdown("<p style='color:#6b7280;'>Next step: Contact both parties via WhatsApp to arrange an introduction.</p>", unsafe_allow_html=True)
+
+            # ============ STAGE UPDATER ============
+            with tab3:
+                st.subheader("Stage Updater")
+                st.markdown("<p style='color:#6b7280;'>Move matches through relationship stages.</p>", unsafe_allow_html=True)
+
+                suggestions_df = load_suggestions()
+                if suggestions_df is None or suggestions_df.empty:
+                    st.info("No suggestions to update.")
+                else:
+                    active = suggestions_df[suggestions_df['Status'].fillna('').astype(str).str.lower().isin(['liked', 'match', 'date', 'married'])]
+
+                    if active.empty:
+                        st.info("No active matches to update. Wait for users to express interest.")
+                    else:
+                        active = active.copy()
+                        active['display'] = active.apply(
+                            lambda r: f"{r['Suggested_To_Email']} + {r['Profile_Of_Email']} ({r['Status']})",
+                            axis=1
+                        )
+                        selected = st.selectbox("Select Match", active['display'].tolist(), key="stage_select")
+
+                        if selected:
+                            row = active[active['display'] == selected].iloc[0]
+                            current_status = row['Status']
+
+                            stages = ["Liked", "Match", "Date", "Married"]
+                            current_idx = stages.index(current_status) if current_status in stages else 0
+
+                            new_status = st.selectbox(
+                                "Update Status",
+                                stages,
+                                index=current_idx,
+                                key="new_stage"
+                            )
+
+                            if st.button("Save Status", key="save_stage_btn"):
+                                if update_suggestion_status(row['Suggested_To_Email'], row['Profile_Of_Email'], new_status):
+                                    st.success(f"Updated to {new_status}!")
+                                    st.rerun()
+                                else:
+                                    st.error("Failed to update status.")
+
+            # ============ MANAGE PROFILES ============
+            with tab4:
+                st.subheader("Manage Profiles")
+
+                # Add New Profile
+                st.markdown("### Add New Profile")
+                with st.form("new_profile_form"):
+                    n_email = st.text_input("Email (required)")
+                    n_name = st.text_input("Name")
+                    n_gender = st.selectbox("Gender", ["", "Male", "Female", "Other"])
+                    col1, col2, col3 = st.columns(3)
+                    with col1:
+                        n_height = st.text_input("Height")
+                    with col2:
+                        n_industry = st.text_input("Industry")
+                    with col3:
+                        n_education = st.text_input("Education")
+
+                    n_linkedin = st.text_input("LinkedIn URL")
+                    n_whatsapp = st.text_input("WhatsApp Number")
+                    n_bio = st.text_area("Bio", height=80)
+                    n_photo = st.text_input("Photo URL")
+                    n_status = st.selectbox("Status", ["Active", "Available", "Hidden"], index=0)
+
+                    submitted = st.form_submit_button("Add Profile")
+                    if submitted:
+                        if not n_email:
+                            st.error("Email is required.")
+                        else:
                             try:
-                                df2 = df.drop(index=sel_index).reset_index(drop=True)
-                                if write_sheet(df2):
-                                    st.success("Profile deleted.")
-                                    st.session_state.df = load_sheet()
-                                else:
-                                    st.error("Failed to delete profile via st.connection.")
-                            except Exception as e:
-                                st.error(f"Deletion failed: {e}")
-                        else:
-                            if row_number:
-                                try:
-                                    gspread_ws.delete_rows(row_number)
-                                    st.success("Profile deleted from sheet.")
-                                    st.session_state.df = load_sheet()
-                                except Exception as e:
-                                    st.error(f"Failed to delete row via gspread: {e}")
+                                existing_ids = pd.to_numeric(df["ID"], errors="coerce").dropna()
+                                next_id = int(existing_ids.max()) + 1 if len(existing_ids) > 0 else 1
+                            except Exception:
+                                next_id = len(df) + 1
+                            new_row = {
+                                "ID": str(next_id),
+                                "Email": n_email,
+                                "Name": n_name,
+                                "Gender": n_gender,
+                                "Height": n_height,
+                                "Industry": n_industry,
+                                "Education": n_education,
+                                "LinkedIn": n_linkedin,
+                                "WhatsApp": n_whatsapp,
+                                "Bio": n_bio,
+                                "PhotoURL": n_photo,
+                                "Status": n_status
+                            }
+                            if append_row(new_row):
+                                st.success("Profile added.")
+                                st.session_state.df = load_sheet()
+                                st.rerun()
                             else:
-                                st.error("Could not locate profile row to delete.")
+                                st.error("Failed to add profile.")
 
-            st.markdown("---")
-            st.subheader("Add New Profile")
-            with st.form("new_profile_form"):
-                n_name = st.text_input("Name")
-                col1, col2, col3 = st.columns(3)
-                with col1:
-                    n_age = st.text_input("Age")
-                    n_height = st.text_input("Height")
-                with col2:
-                    n_profession = st.text_input("Profession")
-                    n_industry = st.text_input("Industry")
-                with col3:
-                    n_education = st.text_input("Education")
-                    n_religion = st.text_input("Religion")
-                
-                n_residency = st.text_input("Residency Status")
-                n_location = st.text_input("Location")
-                n_linkedin = st.text_input("LinkedIn URL")
-                n_bio = st.text_area("Bio", height=80)
-                n_photo = st.text_input("Photo URL")
-                n_status = st.selectbox("Status", ["Available", "Interested", "Single", "Open"], index=0)
-                n_phone = st.text_input("Phone (E.164) for WhatsApp")
-                
-                submitted = st.form_submit_button("Add Profile")
-                if submitted:
-                    # Generate a unique ID (max existing ID + 1, or 1 if none)
-                    try:
-                        existing_ids = pd.to_numeric(df["ID"], errors="coerce").dropna()
-                        next_id = int(existing_ids.max()) + 1 if len(existing_ids) > 0 else 1
-                    except Exception:
-                        next_id = len(df) + 1
-                    new_row = {
-                        "ID": str(next_id),
-                        "Name": n_name,
-                        "Age": n_age,
-                        "Height": n_height,
-                        "Profession": n_profession,
-                        "Industry": n_industry,
-                        "Education": n_education,
-                        "Religion": n_religion,
-                        "Residency_Status": n_residency,
-                        "Location": n_location,
-                        "LinkedIn": n_linkedin,
-                        "Bio": n_bio,
-                        "ImageURL": n_photo,
-                        "Status": n_status,
-                        "Phone": n_phone,
-                        "MatchStage": ""
-                    }
-                    if append_row(new_row):
-                        st.success("Profile added.")
-                        # Reload sheet
-                        st.session_state.df = load_sheet()
-                    else:
-                        st.error("Failed to add profile.")
+                st.markdown("---")
+                st.markdown("### All Profiles")
+                st.dataframe(df[['Email', 'Name', 'Gender', 'Industry', 'Status']].head(50))
 
 # Footer note
 st.markdown("<div class='footer'>Premium matchmaking — built with care.</div>", unsafe_allow_html=True)
