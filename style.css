@@ -310,10 +310,10 @@ header, footer, #MainMenu {
 /* Streamlit buttons - Gradient with pulse */
 .stButton > button {
   background: linear-gradient(135deg, var(--accent-rose), var(--accent-coral)) !important;
-  color: white !important;
+  color: #FFFFFF !important;
   border: none !important;
   border-radius: 12px !important;
-  font-weight: 600 !important;
+  font-weight: 700 !important;
   font-size: 16px !important;
   padding: 0.85rem 1.75rem !important;
   transition: all 0.3s ease !important;
@@ -321,6 +321,12 @@ header, footer, #MainMenu {
   box-shadow: 0 8px 24px rgba(255, 107, 107, 0.3) !important;
   position: relative !important;
   overflow: hidden !important;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2) !important;
+}
+
+.stButton > button * {
+  color: #FFFFFF !important;
+  font-weight: 700 !important;
 }
 
 /* Pulse animation */
@@ -370,9 +376,9 @@ header, footer, #MainMenu {
 .stTextInput label,
 .stTextArea label,
 .stSelectbox label {
-  color: var(--text-primary) !important;
+  color: #FFFFFF !important;
   font-size: 15px !important;
-  font-weight: 500 !important;
+  font-weight: 600 !important;
   margin-bottom: 8px !important;
 }
 
@@ -427,7 +433,8 @@ h3 {
 p, .stMarkdown p {
   font-size: 16px;
   line-height: 1.7;
-  color: var(--text-muted);
+  color: #C4C4C4;
+  font-weight: 400;
 }
 
 /* Links */
@@ -450,27 +457,36 @@ a:hover {
   padding: 12px;
   border-radius: 16px;
   border: 1px solid var(--glass-border);
+  display: flex !important;
+  justify-content: center !important;
 }
 
 .stTabs [data-baseweb="tab"] {
   background: transparent !important;
   color: var(--text-muted) !important;
-  border-radius: 10px !important;
-  padding: 14px 28px !important;
-  font-size: 15px !important;
-  font-weight: 500 !important;
+  border-radius: 12px !important;
+  padding: 16px 40px !important;
+  font-size: 16px !important;
+  font-weight: 600 !important;
   transition: all 0.3s ease !important;
+  flex: 0 0 auto !important;
 }
 
 .stTabs [data-baseweb="tab"]:hover {
   color: var(--text-primary) !important;
-  background: rgba(255, 142, 83, 0.1) !important;
+  background: rgba(255, 142, 83, 0.15) !important;
 }
 
 .stTabs [aria-selected="true"] {
   background: linear-gradient(135deg, var(--accent-rose), var(--accent-coral)) !important;
-  color: white !important;
-  box-shadow: 0 8px 24px rgba(255, 107, 107, 0.3) !important;
+  color: #FFFFFF !important;
+  font-weight: 700 !important;
+  box-shadow: 0 8px 24px rgba(255, 107, 107, 0.4) !important;
+}
+
+.stTabs [aria-selected="true"] * {
+  color: #FFFFFF !important;
+  font-weight: 700 !important;
 }
 
 /* Tables / DataFrames - Glassmorphic */
