@@ -1108,6 +1108,25 @@ else:
         # Force refresh to get latest data (important after profile creation/edit)
         my_profile = get_profile_by_email(st.session_state.user_email, force_refresh=True)
 
+        # DEBUG: Show what's happening
+        if my_profile is None:
+            with st.expander("🔍 Debug Info - Why is my profile not showing?", expanded=False):
+                st.write("**Your email (searching for):**", st.session_state.user_email)
+                debug_df = load_sheet(force_refresh=True)
+                if debug_df is not None and not debug_df.empty:
+                    st.write("**Sheet columns:**", list(debug_df.columns))
+                    if 'Email' in debug_df.columns or any('email' in col.lower() for col in debug_df.columns):
+                        email_col = next((col for col in debug_df.columns if 'email' in col.lower()), None)
+                        if email_col:
+                            st.write(f"**Emails in sheet (from '{email_col}' column):**")
+                            emails_in_sheet = debug_df[email_col].dropna().tolist()
+                            for email in emails_in_sheet:
+                                st.write(f"- `{email}` (matches: {str(email).strip().lower() == st.session_state.user_email.strip().lower()})")
+                    st.write("**Sample of sheet data:**")
+                    st.dataframe(debug_df.head(10))
+                else:
+                    st.error("Could not load sheet data for debugging")
+
         if my_profile is None:
             # Profile not found - show create profile form
             st.info("Welcome! Please complete your profile to get started.")
