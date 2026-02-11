@@ -29,11 +29,17 @@ st.markdown(
 
 # ============ IMAGE UPLOAD HELPER ============
 def upload_images_to_base64(uploaded_files, max_images=3):
-    """Convert uploaded images to base64 data URIs (max 3 images, compressed to <500KB each)."""
+    """Convert uploaded images to base64 data URIs (max 3 images, aggressively compressed).
+
+    Note: Base64 encoding increases size by ~33%. To fit 3 images under Google Sheets' 50K limit,
+    each image must be compressed to ~12KB base64 (~9KB file size).
+    """
     if not uploaded_files:
         return ""
 
     image_urls = []
+    MAX_BASE64_LENGTH_PER_IMAGE = 12000  # ~9KB file size after base64 encoding
+
     for file in uploaded_files[:max_images]:
         try:
             # Read image
@@ -47,21 +53,36 @@ def upload_images_to_base64(uploaded_files, max_images=3):
                 background.paste(img, mask=img.split()[-1] if img.mode == 'RGBA' else None)
                 img = background
 
-            # Resize if too large (max 1200px width)
-            max_width = 1200
-            if img.width > max_width:
-                ratio = max_width / img.width
-                new_size = (max_width, int(img.height * ratio))
-                img = img.resize(new_size, Image.Resampling.LANCZOS)
+            # Try progressively smaller sizes until under limit
+            attempts = [
+                (600, 60),   # 600px max dimension, quality 60
+                (500, 50),   # 500px, quality 50
+                (400, 45),   # 400px, quality 45
+                (350, 40),   # 350px, quality 40
+                (300, 35),   # 300px, quality 35 (last resort)
+            ]
 
-            # Convert to base64
-            buffered = io.BytesIO()
-            img.save(buffered, format="JPEG", quality=85, optimize=True)
-            img_str = base64.b64encode(buffered.getvalue()).decode()
+            success = False
+            for max_dimension, quality in attempts:
+                # Resize image maintaining aspect ratio
+                img_copy = img.copy()
+                img_copy.thumbnail((max_dimension, max_dimension), Image.Resampling.LANCZOS)
 
-            # Create data URI
-            data_uri = f"data:image/jpeg;base64,{img_str}"
-            image_urls.append(data_uri)
+                # Convert to base64
+                buffered = io.BytesIO()
+                img_copy.save(buffered, format="JPEG", quality=quality, optimize=True)
+                img_str = base64.b64encode(buffered.getvalue()).decode()
+
+                data_uri = f"data:image/jpeg;base64,{img_str}"
+
+                # Check if under limit
+                if len(data_uri) <= MAX_BASE64_LENGTH_PER_IMAGE:
+                    image_urls.append(data_uri)
+                    success = True
+                    break
+
+            if not success:
+                st.warning(f"⚠️ Image '{file.name}' is too large even after aggressive compression. Please use an image hosting service (Imgur, Google Photos, etc.) and paste the URL instead.")
         except Exception as e:
             st.warning(f"Failed to process {file.name}: {e}")
             continue
@@ -1177,7 +1198,8 @@ else:
                 cp_linkedin = st.text_input("LinkedIn URL", placeholder="https://linkedin.com/in/yourprofile")
 
                 st.markdown("#### Upload Photos (up to 3)")
-                st.markdown("<p style='color:#a0a0a0; font-size:14px;'>⚠️ Limit 3 photos to avoid storage issues. For more photos, use image URLs below.</p>", unsafe_allow_html=True)
+                st.markdown("<p style='color:#ff8e53; font-size:14px;'><strong>⚠️ Recommended:</strong> Use image URLs from Imgur, Google Photos, or Google Drive instead of uploading files.</p>", unsafe_allow_html=True)
+                st.markdown("<p style='color:#a0a0a0; font-size:13px;'>Direct uploads are heavily compressed (may reduce quality). Image URLs provide better quality and reliability.</p>", unsafe_allow_html=True)
 
                 uploaded_files = st.file_uploader(
                     "Choose images",
@@ -1543,10 +1565,18 @@ else:
 
                 # Add New Profile
                 st.markdown("### Add New Profile")
+                st.markdown("<p style='color:#a0a0a0; font-size:14px;'>This will create both a profile AND login credentials for the user.</p>", unsafe_allow_html=True)
+
                 with st.form("new_profile_form"):
-                    n_email = st.text_input("Email (required)")
+                    st.markdown("#### Login Credentials")
+                    n_username = st.text_input("Username (for login) *", placeholder="e.g., john_doe")
+                    n_password = st.text_input("Temporary Password *", type="password", placeholder="e.g., TempPass123")
+                    n_role = st.selectbox("Role", ["user", "founder"], index=0, help="'user' can browse profiles, 'founder' has God Mode access")
+
+                    st.markdown("#### Profile Information")
+                    n_email = st.text_input("Email (required) *")
                     n_name = st.text_input("Name")
-                    n_gender = st.selectbox("Gender", ["", "Male", "Female", "Other"])
+                    n_gender = st.selectbox("Gender", ["", "Male", "Female", "Other"], key="new_gender")
                     col1, col2, col3 = st.columns(3)
                     with col1:
                         n_height = st.text_input("Height")
@@ -1559,38 +1589,44 @@ else:
                     n_whatsapp = st.text_input("WhatsApp Number")
                     n_bio = st.text_area("Bio", height=80)
                     n_photo = st.text_input("Photo URL")
-                    n_status = st.selectbox("Status", ["Active", "Available", "Hidden"], index=0)
+                    n_status = st.selectbox("Status", ["Active", "Available", "Hidden"], index=0, key="new_status")
 
-                    submitted = st.form_submit_button("Add Profile")
+                    submitted = st.form_submit_button("Add Profile & Credentials")
                     if submitted:
-                        if not n_email:
-                            st.error("Email is required.")
+                        if not n_email or not n_username or not n_password:
+                            st.error("Email, Username, and Password are required.")
                         else:
-                            try:
-                                existing_ids = pd.to_numeric(df["ID"], errors="coerce").dropna()
-                                next_id = int(existing_ids.max()) + 1 if len(existing_ids) > 0 else 1
-                            except Exception:
-                                next_id = len(df) + 1
-                            new_row = {
-                                "ID": str(next_id),
-                                "Email": n_email,
-                                "Name": n_name,
-                                "Gender": n_gender,
-                                "Height": n_height,
-                                "Industry": n_industry,
-                                "Education": n_education,
-                                "LinkedIn": n_linkedin,
-                                "WhatsApp": n_whatsapp,
-                                "Bio": n_bio,
-                                "PhotoURL": n_photo,
-                                "Status": n_status
-                            }
-                            if append_row(new_row):
-                                st.success("Profile added.")
-                                st.session_state.df = load_sheet()
-                                st.rerun()
+                            # First, create the credential
+                            cred_success, cred_error = add_credential(n_username, n_password, n_role)
+                            if not cred_success:
+                                st.error(f"Failed to create credentials: {cred_error}")
                             else:
-                                st.error("Failed to add profile.")
+                                # Then create the profile
+                                try:
+                                    existing_ids = pd.to_numeric(df["ID"], errors="coerce").dropna()
+                                    next_id = int(existing_ids.max()) + 1 if len(existing_ids) > 0 else 1
+                                except Exception:
+                                    next_id = len(df) + 1
+                                new_row = {
+                                    "ID": str(next_id),
+                                    "Email": n_email,
+                                    "Name": n_name,
+                                    "Gender": n_gender,
+                                    "Height": n_height,
+                                    "Industry": n_industry,
+                                    "Education": n_education,
+                                    "LinkedIn": n_linkedin,
+                                    "WhatsApp": n_whatsapp,
+                                    "Bio": n_bio,
+                                    "PhotoURL": n_photo,
+                                    "Status": n_status
+                                }
+                                if append_row(new_row):
+                                    st.success(f"✅ Profile and credentials created!\n\n**Username:** {n_username}\n**Password:** {n_password}\n\nShare these credentials with the user.")
+                                    st.session_state.df = load_sheet()
+                                    st.rerun()
+                                else:
+                                    st.error("Failed to add profile.")
 
                 st.markdown("---")
                 st.markdown("### All Profiles")

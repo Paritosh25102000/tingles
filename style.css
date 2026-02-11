@@ -392,6 +392,32 @@ header, footer, #MainMenu {
   background: var(--glass-bg) !important;
   backdrop-filter: blur(10px) !important;
   border-color: var(--glass-border) !important;
+  color: var(--text-primary) !important;
+}
+
+/* Selectbox selected value and dropdown options */
+.stSelectbox [data-baseweb="select"] span,
+.stSelectbox [data-baseweb="select"] div {
+  color: var(--text-primary) !important;
+}
+
+/* Dropdown menu */
+.stSelectbox [role="listbox"] {
+  background: var(--glass-bg) !important;
+  backdrop-filter: blur(20px) !important;
+  border: 1px solid var(--glass-border) !important;
+  border-radius: 12px !important;
+}
+
+/* Dropdown options */
+.stSelectbox [role="option"] {
+  color: var(--text-primary) !important;
+  background: transparent !important;
+}
+
+.stSelectbox [role="option"]:hover {
+  background: rgba(255, 142, 83, 0.15) !important;
+  color: var(--accent-coral) !important;
 }
 
 /* Headings with gradient */
