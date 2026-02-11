@@ -15,6 +15,41 @@ try:
 except FileNotFoundError:
     st.warning("style.css not found — default styling will apply.")
 
+# Additional aggressive CSS override for dropdowns
+st.markdown("""
+<style>
+/* Nuclear option: Force all selectbox text to be white */
+div[data-baseweb="select"] {
+    color: #FFFFFF !important;
+}
+
+div[data-baseweb="select"] * {
+    color: #FFFFFF !important;
+    -webkit-text-fill-color: #FFFFFF !important;
+}
+
+div[data-baseweb="select"] > div {
+    color: #FFFFFF !important;
+    background-color: rgba(255, 255, 255, 0.08) !important;
+}
+
+/* Target the value container specifically */
+div[data-baseweb="select"] div[class*="ValueContainer"],
+div[data-baseweb="select"] div[class*="singleValue"],
+div[data-baseweb="select"] div[class*="Input"] {
+    color: #FFFFFF !important;
+}
+
+/* Force all text nodes within select to be white */
+div[data-baseweb="select"] div,
+div[data-baseweb="select"] span,
+div[data-baseweb="select"] input {
+    color: #FFFFFF !important;
+    -webkit-text-fill-color: #FFFFFF !important;
+}
+</style>
+""", unsafe_allow_html=True)
+
 st.markdown(
     """
 <div class="app-container">
