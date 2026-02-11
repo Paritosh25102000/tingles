@@ -1569,12 +1569,11 @@ else:
 
                 with st.form("new_profile_form"):
                     st.markdown("#### Login Credentials")
-                    n_username = st.text_input("Username (for login) *", placeholder="e.g., john_doe")
+                    n_email = st.text_input("Email (for login) *", placeholder="e.g., john.doe@example.com")
                     n_password = st.text_input("Temporary Password *", type="password", placeholder="e.g., TempPass123")
                     n_role = st.selectbox("Role", ["user", "founder"], index=0, help="'user' can browse profiles, 'founder' has God Mode access")
 
                     st.markdown("#### Profile Information")
-                    n_email = st.text_input("Email (required) *")
                     n_name = st.text_input("Name")
                     n_gender = st.selectbox("Gender", ["", "Male", "Female", "Other"], key="new_gender")
                     col1, col2, col3 = st.columns(3)
@@ -1593,11 +1592,11 @@ else:
 
                     submitted = st.form_submit_button("Add Profile & Credentials")
                     if submitted:
-                        if not n_email or not n_username or not n_password:
-                            st.error("Email, Username, and Password are required.")
+                        if not n_email or not n_password:
+                            st.error("Email and Password are required.")
                         else:
                             # First, create the credential
-                            cred_success, cred_error = add_credential(n_username, n_password, n_role)
+                            cred_success, cred_error = add_credential(n_email, n_password, n_role)
                             if not cred_success:
                                 st.error(f"Failed to create credentials: {cred_error}")
                             else:
@@ -1622,7 +1621,7 @@ else:
                                     "Status": n_status
                                 }
                                 if append_row(new_row):
-                                    st.success(f"✅ Profile and credentials created!\n\n**Username:** {n_username}\n**Password:** {n_password}\n\nShare these credentials with the user.")
+                                    st.success(f"✅ Profile and credentials created!\n\n**Email:** {n_email}\n**Password:** {n_password}\n\nShare these credentials with the user.")
                                     st.session_state.df = load_sheet()
                                     st.rerun()
                                 else:

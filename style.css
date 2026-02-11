@@ -392,13 +392,21 @@ header, footer, #MainMenu {
   background: var(--glass-bg) !important;
   backdrop-filter: blur(10px) !important;
   border-color: var(--glass-border) !important;
-  color: var(--text-primary) !important;
+  color: #FFFFFF !important;
 }
 
-/* Selectbox selected value and dropdown options */
+/* Selectbox selected value - AGGRESSIVE targeting */
 .stSelectbox [data-baseweb="select"] span,
-.stSelectbox [data-baseweb="select"] div {
-  color: var(--text-primary) !important;
+.stSelectbox [data-baseweb="select"] div,
+.stSelectbox [data-baseweb="select"] > div > div,
+.stSelectbox [data-baseweb="select"] > div > div > div,
+.stSelectbox div[data-baseweb="select"] span {
+  color: #FFFFFF !important;
+}
+
+/* Force white color on all text within selectbox */
+.stSelectbox * {
+  color: #FFFFFF !important;
 }
 
 /* Dropdown menu */
@@ -411,13 +419,18 @@ header, footer, #MainMenu {
 
 /* Dropdown options */
 .stSelectbox [role="option"] {
-  color: var(--text-primary) !important;
+  color: #FFFFFF !important;
   background: transparent !important;
 }
 
 .stSelectbox [role="option"]:hover {
   background: rgba(255, 142, 83, 0.15) !important;
   color: var(--accent-coral) !important;
+}
+
+/* Override any nested color inheritance */
+.stSelectbox [role="option"] * {
+  color: inherit !important;
 }
 
 /* Headings with gradient */
