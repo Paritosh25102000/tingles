@@ -1594,10 +1594,11 @@ else:
                             stages = ["Liked", "Match", "Date", "Married"]
                             current_idx = stages.index(current_status) if current_status in stages else 0
 
-                            new_status = st.selectbox(
+                            new_status = st.radio(
                                 "Update Status",
                                 stages,
                                 index=current_idx,
+                                horizontal=True,
                                 key="new_stage"
                             )
 
@@ -1626,19 +1627,23 @@ else:
                     n_name = st.text_input("Name")
                     n_gender = st.radio("Gender", ["Male", "Female", "Other"], horizontal=True, key="new_gender")
 
-                    col1, col2, col3 = st.columns(3)
+                    col1, col2 = st.columns(2)
                     with col1:
                         n_age = st.text_input("Age", placeholder="e.g., 28")
                     with col2:
                         n_height = st.text_input("Height", placeholder="e.g., 5'9\"")
-                    with col3:
-                        n_religion = st.text_input("Religion", placeholder="e.g., Hindu, Muslim, Christian")
 
                     col4, col5 = st.columns(2)
                     with col4:
-                        n_industry = st.text_input("Industry")
+                        n_profession = st.text_input("Profession", placeholder="e.g., Software Engineer")
                     with col5:
-                        n_education = st.text_input("Education")
+                        n_industry = st.text_input("Industry", placeholder="e.g., Technology")
+
+                    col4b, col5b = st.columns(2)
+                    with col4b:
+                        n_education = st.text_input("Education", placeholder="e.g., MBA from IIM")
+                    with col5b:
+                        n_religion = st.text_input("Religion", placeholder="e.g., Hindu, Muslim, Christian")
 
                     col6, col7 = st.columns(2)
                     with col6:
@@ -1675,9 +1680,10 @@ else:
                                     "Gender": n_gender,
                                     "Age": n_age,
                                     "Height": n_height,
-                                    "Religion": n_religion,
+                                    "Profession": n_profession,
                                     "Industry": n_industry,
                                     "Education": n_education,
+                                    "Religion": n_religion,
                                     "Residency_Status": n_residency,
                                     "Location": n_location,
                                     "LinkedIn": n_linkedin,
