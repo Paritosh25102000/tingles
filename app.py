@@ -18,34 +18,48 @@ except FileNotFoundError:
 # Additional aggressive CSS override for dropdowns
 st.markdown("""
 <style>
-/* Nuclear option: Force all selectbox text to be white */
-div[data-baseweb="select"] {
-    color: #FFFFFF !important;
-}
+/* Ultimate nuclear option for selectbox visibility */
 
-div[data-baseweb="select"] * {
+/* Target all possible selectbox containers */
+[data-baseweb="select"],
+[data-baseweb="select"] *,
+div[data-baseweb="select"],
+div[data-baseweb="select"] *,
+.stSelectbox [data-baseweb="select"],
+.stSelectbox [data-baseweb="select"] * {
     color: #FFFFFF !important;
     -webkit-text-fill-color: #FFFFFF !important;
+    background: transparent !important;
 }
 
-div[data-baseweb="select"] > div {
-    color: #FFFFFF !important;
+/* Target the main control container */
+div[data-baseweb="select"] > div[class*="control"] {
     background-color: rgba(255, 255, 255, 0.08) !important;
+    border-color: rgba(255, 255, 255, 0.1) !important;
 }
 
-/* Target the value container specifically */
-div[data-baseweb="select"] div[class*="ValueContainer"],
-div[data-baseweb="select"] div[class*="singleValue"],
-div[data-baseweb="select"] div[class*="Input"] {
-    color: #FFFFFF !important;
-}
-
-/* Force all text nodes within select to be white */
-div[data-baseweb="select"] div,
-div[data-baseweb="select"] span,
-div[data-baseweb="select"] input {
+/* Target ALL possible value containers and their children */
+div[data-baseweb="select"] [class*="ValueContainer"],
+div[data-baseweb="select"] [class*="ValueContainer"] *,
+div[data-baseweb="select"] [class*="singleValue"],
+div[data-baseweb="select"] [class*="singleValue"] *,
+div[data-baseweb="select"] [class*="placeholder"],
+div[data-baseweb="select"] [class*="Input"],
+div[data-baseweb="select"] [class*="Input"] * {
     color: #FFFFFF !important;
     -webkit-text-fill-color: #FFFFFF !important;
+}
+
+/* Make sure all divs and spans inside get white text */
+div[data-baseweb="select"] div[class],
+div[data-baseweb="select"] span[class] {
+    color: #FFFFFF !important;
+    -webkit-text-fill-color: #FFFFFF !important;
+}
+
+/* Override any opacity settings that might hide text */
+div[data-baseweb="select"] * {
+    opacity: 1 !important;
 }
 </style>
 """, unsafe_allow_html=True)
