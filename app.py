@@ -1576,13 +1576,26 @@ else:
                     st.markdown("#### Profile Information")
                     n_name = st.text_input("Name")
                     n_gender = st.selectbox("Gender", ["", "Male", "Female", "Other"], key="new_gender")
+
                     col1, col2, col3 = st.columns(3)
                     with col1:
-                        n_height = st.text_input("Height")
+                        n_age = st.text_input("Age", placeholder="e.g., 28")
                     with col2:
-                        n_industry = st.text_input("Industry")
+                        n_height = st.text_input("Height", placeholder="e.g., 5'9\"")
                     with col3:
+                        n_religion = st.text_input("Religion", placeholder="e.g., Hindu, Muslim, Christian")
+
+                    col4, col5 = st.columns(2)
+                    with col4:
+                        n_industry = st.text_input("Industry")
+                    with col5:
                         n_education = st.text_input("Education")
+
+                    col6, col7 = st.columns(2)
+                    with col6:
+                        n_residency = st.text_input("Residency Status", placeholder="e.g., Citizen, PR, Work Visa")
+                    with col7:
+                        n_location = st.text_input("Location", placeholder="e.g., Mumbai, India")
 
                     n_linkedin = st.text_input("LinkedIn URL")
                     n_whatsapp = st.text_input("WhatsApp Number")
@@ -1611,9 +1624,13 @@ else:
                                     "Email": n_email,
                                     "Name": n_name,
                                     "Gender": n_gender,
+                                    "Age": n_age,
                                     "Height": n_height,
+                                    "Religion": n_religion,
                                     "Industry": n_industry,
                                     "Education": n_education,
+                                    "Residency_Status": n_residency,
+                                    "Location": n_location,
                                     "LinkedIn": n_linkedin,
                                     "WhatsApp": n_whatsapp,
                                     "Bio": n_bio,
