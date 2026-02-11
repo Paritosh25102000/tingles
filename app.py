@@ -1571,7 +1571,7 @@ else:
                     st.markdown("#### Login Credentials")
                     n_email = st.text_input("Email (for login) *", placeholder="e.g., john.doe@example.com")
                     n_password = st.text_input("Temporary Password *", type="password", placeholder="e.g., TempPass123")
-                    n_role = st.selectbox("Role", ["user", "founder"], index=0, help="'user' can browse profiles, 'founder' has God Mode access")
+                    n_role = "user"  # Founders only add regular users
 
                     st.markdown("#### Profile Information")
                     n_name = st.text_input("Name")

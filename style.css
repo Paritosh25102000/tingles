@@ -382,31 +382,38 @@ header, footer, #MainMenu {
   margin-bottom: 8px !important;
 }
 
-/* Selectbox - Glassmorphic */
+/* Selectbox - Completely override Streamlit's default styling */
+.stSelectbox {
+  color: #FFFFFF !important;
+}
+
+/* Target the container */
 .stSelectbox > div > div {
   background: var(--glass-bg) !important;
   backdrop-filter: blur(10px) !important;
+  color: #FFFFFF !important;
 }
 
-.stSelectbox [data-baseweb="select"] > div {
+/* Target the select element and all its children */
+.stSelectbox [data-baseweb="select"],
+.stSelectbox [data-baseweb="select"] *,
+.stSelectbox [data-baseweb="select"] > div,
+.stSelectbox [data-baseweb="select"] > div *,
+.stSelectbox [data-baseweb="select"] span,
+.stSelectbox [data-baseweb="select"] div {
   background: var(--glass-bg) !important;
   backdrop-filter: blur(10px) !important;
   border-color: var(--glass-border) !important;
   color: #FFFFFF !important;
+  fill: #FFFFFF !important;
+  -webkit-text-fill-color: #FFFFFF !important;
 }
 
-/* Selectbox selected value - AGGRESSIVE targeting */
-.stSelectbox [data-baseweb="select"] span,
-.stSelectbox [data-baseweb="select"] div,
-.stSelectbox [data-baseweb="select"] > div > div,
-.stSelectbox [data-baseweb="select"] > div > div > div,
-.stSelectbox div[data-baseweb="select"] span {
-  color: #FFFFFF !important;
-}
-
-/* Force white color on all text within selectbox */
-.stSelectbox * {
-  color: #FFFFFF !important;
+/* Remove any background gradients or text fill from headings that might interfere */
+.stSelectbox h1, .stSelectbox h2, .stSelectbox h3,
+.stSelectbox .stHeader {
+  -webkit-text-fill-color: #FFFFFF !important;
+  background: none !important;
 }
 
 /* Dropdown menu */
@@ -421,16 +428,18 @@ header, footer, #MainMenu {
 .stSelectbox [role="option"] {
   color: #FFFFFF !important;
   background: transparent !important;
+  -webkit-text-fill-color: #FFFFFF !important;
 }
 
 .stSelectbox [role="option"]:hover {
   background: rgba(255, 142, 83, 0.15) !important;
   color: var(--accent-coral) !important;
+  -webkit-text-fill-color: var(--accent-coral) !important;
 }
 
-/* Override any nested color inheritance */
 .stSelectbox [role="option"] * {
   color: inherit !important;
+  -webkit-text-fill-color: inherit !important;
 }
 
 /* Headings with gradient */
