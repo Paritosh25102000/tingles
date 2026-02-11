@@ -1224,7 +1224,7 @@ else:
                 with col2:
                     cp_height = st.text_input("Height", placeholder="e.g., 5'10\"")
                 with col3:
-                    cp_gender = st.selectbox("Gender", ["", "Male", "Female", "Other"])
+                    cp_gender = st.radio("Gender", ["Male", "Female", "Other"])
 
                 col4, col5 = st.columns(2)
                 with col4:
@@ -1624,7 +1624,7 @@ else:
 
                     st.markdown("#### Profile Information")
                     n_name = st.text_input("Name")
-                    n_gender = st.selectbox("Gender", ["", "Male", "Female", "Other"], key="new_gender")
+                    n_gender = st.radio("Gender", ["Male", "Female", "Other"], horizontal=True, key="new_gender")
 
                     col1, col2, col3 = st.columns(3)
                     with col1:
@@ -1650,7 +1650,7 @@ else:
                     n_whatsapp = st.text_input("WhatsApp Number")
                     n_bio = st.text_area("Bio", height=80)
                     n_photo = st.text_input("Photo URL")
-                    n_status = st.selectbox("Status", ["Active", "Available", "Hidden"], index=0, key="new_status")
+                    n_status = st.radio("Status", ["Active", "Available", "Hidden"], index=0, horizontal=True, key="new_status")
 
                     submitted = st.form_submit_button("Add Profile & Credentials")
                     if submitted:
