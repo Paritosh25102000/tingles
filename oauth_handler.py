@@ -38,7 +38,7 @@ class OAuthHandler:
 
         params = {
             "client_id": self.google_client_id,
-            "redirect_uri": f"{self.redirect_uri}/",
+            "redirect_uri": self.redirect_uri,
             "response_type": "code",
             "scope": "openid email profile",
             "state": state,
@@ -59,7 +59,7 @@ class OAuthHandler:
 
         params = {
             "client_id": self.linkedin_client_id,
-            "redirect_uri": f"{self.redirect_uri}/",
+            "redirect_uri": self.redirect_uri,
             "response_type": "code",
             "scope": "openid profile email",
             "state": state
@@ -80,7 +80,7 @@ class OAuthHandler:
                 "client_secret": self.google_client_secret,
                 "code": code,
                 "grant_type": "authorization_code",
-                "redirect_uri": f"{self.redirect_uri}/"
+                "redirect_uri": self.redirect_uri
             }
 
             token_response = requests.post(token_url, data=token_data)
@@ -126,7 +126,7 @@ class OAuthHandler:
                 "client_secret": self.linkedin_client_secret,
                 "code": code,
                 "grant_type": "authorization_code",
-                "redirect_uri": f"{self.redirect_uri}/"
+                "redirect_uri": self.redirect_uri
             }
 
             token_response = requests.post(token_url, data=token_data)
