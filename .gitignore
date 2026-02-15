@@ -7,3 +7,7 @@ __pycache__/
 *.pyc
 /.mypy_cache
 /.coverage
+
+# Migration scripts that may contain credentials
+migration/*_founder.py
+migration/*_credential*.py
