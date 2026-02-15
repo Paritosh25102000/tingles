@@ -46,6 +46,19 @@ class OAuthHandler:
             "prompt": "select_account"
         }
 
+        # DEBUG: Show configuration
+        st.info(f"""
+        **🔍 DEBUG INFO:**
+        - Client ID: {self.google_client_id[:20]}...
+        - Redirect URI: `{self.redirect_uri}`
+        - Full URL length: {len(f"https://accounts.google.com/o/oauth2/v2/auth?{urlencode(params)}")} chars
+
+        **✅ CHECKLIST:**
+        1. Is Streamlit Cloud secrets updated with this redirect_uri?
+        2. Is Google Console redirect URI exactly: `{self.redirect_uri}`?
+        3. Are you signing in with test user: paritosh.raikar@tins.world?
+        """)
+
         return f"https://accounts.google.com/o/oauth2/v2/auth?{urlencode(params)}"
 
     def get_linkedin_auth_url(self) -> str:
