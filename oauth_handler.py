@@ -46,7 +46,12 @@ class OAuthHandler:
             "prompt": "select_account"
         }
 
-        return f"https://accounts.google.com/o/oauth2/v2/auth?{urlencode(params)}"
+        auth_url = f"https://accounts.google.com/o/oauth2/v2/auth?{urlencode(params)}"
+
+        # DEBUG: Show the redirect_uri being used
+        st.info(f"🔍 DEBUG - redirect_uri being sent: `{self.redirect_uri}`")
+
+        return auth_url
 
     def get_linkedin_auth_url(self) -> str:
         """Generate LinkedIn OAuth authorization URL."""
