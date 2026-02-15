@@ -46,12 +46,7 @@ class OAuthHandler:
             "prompt": "select_account"
         }
 
-        auth_url = f"https://accounts.google.com/o/oauth2/v2/auth?{urlencode(params)}"
-
-        # DEBUG: Show the redirect_uri being used
-        st.info(f"🔍 DEBUG - redirect_uri being sent: `{self.redirect_uri}`")
-
-        return auth_url
+        return f"https://accounts.google.com/o/oauth2/v2/auth?{urlencode(params)}"
 
     def get_linkedin_auth_url(self) -> str:
         """Generate LinkedIn OAuth authorization URL."""
@@ -264,14 +259,10 @@ def create_oauth_buttons(show_setup_info=False, key_prefix=""):
     # Google OAuth button
     if has_google:
         with col1:
+            google_auth_url = oauth.get_google_auth_url()
             if st.button("Sign in with Google", use_container_width=True, key=f"{key_prefix}google_oauth"):
-                google_auth_url = oauth.get_google_auth_url()
                 st.session_state.oauth_provider = "google"
-
-                # DEBUG MODE: Show URL instead of redirecting
-                st.success("✅ Debug Mode: OAuth URL generated successfully!")
-                st.code(f"Redirect URI: {oauth.redirect_uri}", language="text")
-                st.markdown(f"**[Click here to continue to Google]({google_auth_url})**")
+                st.markdown(f'<meta http-equiv="refresh" content="0;url={google_auth_url}">', unsafe_allow_html=True)
                 st.stop()
 
     # LinkedIn OAuth button
