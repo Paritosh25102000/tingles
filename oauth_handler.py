@@ -46,19 +46,6 @@ class OAuthHandler:
             "prompt": "select_account"
         }
 
-        # DEBUG: Show configuration
-        st.info(f"""
-        **🔍 DEBUG INFO:**
-        - Client ID: {self.google_client_id[:20]}...
-        - Redirect URI: `{self.redirect_uri}`
-        - Full URL length: {len(f"https://accounts.google.com/o/oauth2/v2/auth?{urlencode(params)}")} chars
-
-        **✅ CHECKLIST:**
-        1. Is Streamlit Cloud secrets updated with this redirect_uri?
-        2. Is Google Console redirect URI exactly: `{self.redirect_uri}`?
-        3. Are you signing in with test user: paritosh.raikar@tins.world?
-        """)
-
         return f"https://accounts.google.com/o/oauth2/v2/auth?{urlencode(params)}"
 
     def get_linkedin_auth_url(self) -> str:
@@ -272,10 +259,26 @@ def create_oauth_buttons(show_setup_info=False, key_prefix=""):
     # Google OAuth button
     if has_google:
         with col1:
-            google_auth_url = oauth.get_google_auth_url()
             if st.button("Sign in with Google", use_container_width=True, key=f"{key_prefix}google_oauth"):
                 st.session_state.oauth_provider = "google"
-                st.markdown(f'<meta http-equiv="refresh" content="0;url={google_auth_url}">', unsafe_allow_html=True)
+                google_auth_url = oauth.get_google_auth_url()
+
+                # DEBUG MODE - Show info without auto-redirect
+                st.markdown("---")
+                st.info(f"""
+                **🔍 DEBUG INFO:**
+                - Client ID: `{oauth.google_client_id[:20]}...`
+                - Redirect URI: `{oauth.redirect_uri}`
+                - Full Auth URL length: {len(google_auth_url)} chars
+
+                **✅ CHECKLIST - Have you done these?**
+                1. Updated Streamlit Cloud secrets with redirect_uri: `{oauth.redirect_uri}`
+                2. Updated Google Console redirect URI to EXACTLY: `{oauth.redirect_uri}`
+                3. Are you signing in with test user: `paritosh.raikar@tins.world`?
+                """)
+
+                st.markdown(f"### 👉 [Click here to continue to Google OAuth]({google_auth_url})")
+                st.warning("⚠️ Manual click required - auto-redirect disabled for debugging")
                 st.stop()
 
     # LinkedIn OAuth button
