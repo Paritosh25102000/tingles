@@ -264,10 +264,14 @@ def create_oauth_buttons(show_setup_info=False, key_prefix=""):
     # Google OAuth button
     if has_google:
         with col1:
-            google_auth_url = oauth.get_google_auth_url()
             if st.button("Sign in with Google", use_container_width=True, key=f"{key_prefix}google_oauth"):
+                google_auth_url = oauth.get_google_auth_url()
                 st.session_state.oauth_provider = "google"
-                st.markdown(f'<meta http-equiv="refresh" content="0;url={google_auth_url}">', unsafe_allow_html=True)
+
+                # DEBUG MODE: Show URL instead of redirecting
+                st.success("✅ Debug Mode: OAuth URL generated successfully!")
+                st.code(f"Redirect URI: {oauth.redirect_uri}", language="text")
+                st.markdown(f"**[Click here to continue to Google]({google_auth_url})**")
                 st.stop()
 
     # LinkedIn OAuth button
