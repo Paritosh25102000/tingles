@@ -1,0 +1,47 @@
+/* backup of previous style.css */
+@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700&display=swap');
+:root{
+  --cream: #f7f2ec;
+  --navy: #071428;
+  --muted: #6b7280;
+  --card-bg: rgba(255,255,255,0.95);
+}
+html, body, [class*="css"] {
+  background: var(--cream) !important;
+  color: var(--navy) !important;
+  font-family: 'Playfair Display', serif !important;
+}
+/* Hide Streamlit chrome */
+header, footer, #MainMenu {
+  visibility: hidden !important;
+}
+.app-container .brand h1{
+  margin: 0; font-size: 36px; letter-spacing: 1px;
+}
+.app-container .brand .tag{
+  margin-top: -6px; color: var(--muted);
+}
+.profile-card{
+  background: var(--card-bg);
+  border-radius: 12px;
+  padding: 12px;
+  margin-bottom: 18px;
+  box-shadow: 0 6px 18px rgba(7,20,40,0.08);
+}
+.profile-card img{
+  border-radius: 8px;
+  max-height: 260px;
+  object-fit: cover;
+}
+.profile-card .name{
+  margin: 8px 0 4px 0; color: var(--navy);
+}
+.profile-card .stats{
+  color: var(--muted); margin-bottom: 8px;
+}
+.btn{
+  display: inline-block; padding: 8px 12px; border-radius: 8px; text-decoration: none; margin-right: 6px; font-weight: 600;
+}
+.btn-link{ background: transparent; color: var(--navy); border: 1px solid rgba(7,20,40,0.08); }
+.btn-wa{ background: #25D366; color: white; }
+.footer{ text-align:center; color: var(--muted); padding: 18px 0; }

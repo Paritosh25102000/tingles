@@ -20,7 +20,7 @@ Example data:
 
 | username | password | role |
 |----------|----------|------|
-| virat | Virat@1105 | founder |
+| Suman | godmode | founder |
 | client1 | password123 | user |
 | client2 | client_pass | user |
 

@@ -8,3 +8,7 @@ oauth2client
 google-auth-httplib2
 google-auth-oauthlib
 watchdog
+supabase>=2.0.0
+Pillow>=9.0.0
+requests>=2.28.0
+httpx>=0.24.0

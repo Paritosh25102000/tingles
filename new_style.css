@@ -1,0 +1,80 @@
+@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700&family=Inter:wght@300;400;600&display=swap');
+:root{
+  --bg: #0b0f12;
+  --panel: #0f1720;
+  --muted: #9aa4ae;
+  --accent: #c9b89f; /* warm cream accent */
+  --card: rgba(255,255,255,0.03);
+  --glass: rgba(255,255,255,0.02);
+}
+html, body, [class*="css"] {
+  background: var(--bg) !important;
+  color: #e6eef6 !important;
+  font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial !important;
+}
+/* Hide Streamlit chrome for a clean embed */
+header, footer, #MainMenu {
+  display: none !important;
+}
+/* App brand */
+.app-container .brand{
+  margin-bottom: 18px;
+}
+.app-container .brand h1{
+  margin: 0; font-size: 40px; letter-spacing: 0.6px; font-family: 'Playfair Display', serif; font-weight:700; color: #ffffff;
+}
+.app-container .brand .tag{
+  margin-top: 6px; color: var(--muted); font-size: 14px;
+}
+/* Layout */
+.stApp > main {
+  padding-top: 10px;
+}
+/* Sidebar subtle background */
+[data-testid="stSidebar"] {
+  background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));
+}
+/* Profile cards */
+.profile-card{
+  background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));
+  border-radius: 10px;
+  padding: 18px;
+  margin-bottom: 26px;
+  box-shadow: 0 10px 30px rgba(2,6,10,0.6);
+  border: 1px solid rgba(255,255,255,0.03);
+}
+.profile-card img{
+  border-radius: 10px;
+  width: 100%;
+  height: 360px;
+  object-fit: cover;
+  display: block;
+  margin-bottom: 14px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.6);
+}
+.profile-card .name{
+  margin: 6px 0 8px 0; color: #ffffff; font-family: 'Playfair Display', serif; font-size: 20px;
+}
+.profile-card .stats{
+  color: var(--muted); margin-bottom: 12px; font-size: 14px;
+}
+.btn{ display: inline-block; padding: 10px 14px; border-radius: 10px; text-decoration: none; margin-right: 8px; font-weight: 600; }
+.btn-link{ background: transparent; color: var(--accent); border: 1px solid rgba(255,255,255,0.04); padding: 8px 12px; }
+.btn-wa{ background: #25D366; color: white; }
+/* Gallery heading */
+h1, .stHeader {
+  color: #fff;
+}
+h1 { font-family: 'Playfair Display', serif; }
+/* Buttons and inputs */
+.stButton>button, .stTextInput>div>input, .stSelectbox>div>div>div{
+  border-radius: 10px !important;
+}
+/* Footer */
+.footer{ text-align:center; color: var(--muted); padding: 18px 0; font-size: 13px; }
+/* Make LinkedIn link subtle */
+a.btn-link { color: var(--accent) !important; }
+/* Responsive tweaks */
+@media (max-width: 900px){
+  .profile-card img{ height: 260px; }
+}

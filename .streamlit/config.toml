@@ -1,0 +1,9 @@
+[client]
+showSidebarNavigation = true
+
+[ui]
+hideTopBar = false
+hideSidebarNav = false
+
+[server]
+runOnSave = true
